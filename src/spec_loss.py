@@ -459,10 +459,22 @@ def compute_spec_loss(
     # Ensure draft logits are detached and on the same device as target
     draft_logits = draft_logits.detach().to(target_logits.device)
 
+    # Align vocab sizes if target and draft have different vocabulary sizes
+    # Only truncate copies for spec loss — task loss uses full target_logits
+    target_vocab = target_logits.size(-1)
+    draft_vocab = draft_logits.size(-1)
+    if target_vocab != draft_vocab:
+        min_vocab = min(target_vocab, draft_vocab)
+        target_logits_spec = target_logits[..., :min_vocab]
+        draft_logits_spec = draft_logits[..., :min_vocab]
+    else:
+        target_logits_spec = target_logits
+        draft_logits_spec = draft_logits
+
     # Speculator loss
     spec_loss_fn = _SPEC_LOSS_FNS[loss_type]
     spec_loss = spec_loss_fn(
-        target_logits, draft_logits, attention_mask, temperature, top_k
+        target_logits_spec, draft_logits_spec, attention_mask, temperature, top_k
     )
 
     # Combined loss
@@ -470,7 +482,7 @@ def compute_spec_loss(
 
     # Acceptance proxy (monitoring only, no gradients)
     acceptance_proxy = _compute_acceptance_proxy(
-        target_logits, draft_logits, attention_mask, temperature
+        target_logits_spec, draft_logits_spec, attention_mask, temperature
     )
 
     return {
