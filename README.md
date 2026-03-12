@@ -18,8 +18,8 @@ The draft model is frozen and loaded alongside the target during training. It pr
 
 | Role | Model | Size |
 |------|-------|------|
-| Target | `meta-llama/Llama-3.1-8B-Instruct` | 8B |
-| Draft | `meta-llama/Llama-3.2-1B-Instruct` | 1B |
+| Target | `Qwen/Qwen2.5-7B-Instruct` | 8B |
+| Draft | `Qwen/Qwen2.5-0.5B-Instruct` | 1B |
 
 ## Experiments
 
@@ -48,8 +48,8 @@ python -m src.train --config configs/exp3_spec_aware.yaml \
 
 # Measure acceptance rate
 python -m src.measure_acceptance \
-    --target_model meta-llama/Llama-3.1-8B-Instruct \
-    --draft_model meta-llama/Llama-3.2-1B-Instruct \
+    --target_model Qwen/Qwen2.5-7B-Instruct \
+    --draft_model Qwen/Qwen2.5-0.5B-Instruct \
     --adapter_path results/exp3_spec_aware_code_lam0.1/final \
     --prompts_file configs/eval_prompts.yaml \
     --domain code \
@@ -57,8 +57,8 @@ python -m src.measure_acceptance \
 
 # Measure KL divergence
 python -m src.measure_kl \
-    --target_model meta-llama/Llama-3.1-8B-Instruct \
-    --draft_model meta-llama/Llama-3.2-1B-Instruct \
+    --target_model Qwen/Qwen2.5-7B-Instruct \
+    --draft_model Qwen/Qwen2.5-0.5B-Instruct \
     --adapter_path results/exp3_spec_aware_code_lam0.1/final \
     --prompts_file configs/eval_prompts.yaml \
     --domain code \

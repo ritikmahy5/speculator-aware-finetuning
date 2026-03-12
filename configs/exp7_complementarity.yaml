@@ -3,8 +3,8 @@ experiment_id: "EXP-7"
 hypothesis: "H7 — Spec-aware FT + ATLAS adaptation > standard FT + ATLAS adaptation"
 
 models:
-  target: "meta-llama/Llama-3.1-8B-Instruct"
-  draft: "meta-llama/Llama-3.2-1B-Instruct"
+  target: "Qwen/Qwen2.5-7B-Instruct"
+  draft: "Qwen/Qwen2.5-0.5B-Instruct"
 
 domain: "code"
 

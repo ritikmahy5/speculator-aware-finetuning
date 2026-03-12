@@ -3,8 +3,8 @@ experiment_id: "EXP-4"
 hypothesis: "H4 — There exists a lambda sweet spot preserving >90% base alpha with <5% task perf drop"
 
 models:
-  target: "meta-llama/Llama-3.1-8B-Instruct"
-  draft: "meta-llama/Llama-3.2-1B-Instruct"
+  target: "Qwen/Qwen2.5-7B-Instruct"
+  draft: "Qwen/Qwen2.5-0.5B-Instruct"
 
 # Override per run via CLI: --domain code --spec_loss.lam 0.05
 domain: "code"
