@@ -17,8 +17,8 @@ logger = logging.getLogger(__name__)
 # Dataset configurations per domain
 DOMAIN_CONFIGS = {
     "code": {
-        "path": "bigcode/starcoderdata",
-        "data_dir": "python",
+        "path": "iamtarun/python_code_instructions_18k_alpaca",
+        "data_dir": None,
         "split": "train",
     },
     "medical": {
@@ -52,9 +52,20 @@ def get_domain_text(sample: dict, domain: str, tokenizer=None) -> Optional[str]:
     text = None
 
     if domain == "code":
-        text = sample.get("content")
-        if not text or not isinstance(text, str):
-            return None
+        # Use instruction + code output for a complete coding sample
+        instruction = sample.get("instruction", "")
+        output = sample.get("output", "")
+        if not output:
+            # Fallback for datasets with a "content" field (e.g. starcoderdata)
+            text = sample.get("content")
+            if not text or not isinstance(text, str):
+                return None
+        else:
+            parts = []
+            if instruction:
+                parts.append(f"# Task: {instruction}")
+            parts.append(output)
+            text = "\n".join(parts)
 
     elif domain == "medical":
         input_text = sample.get("input", "")
