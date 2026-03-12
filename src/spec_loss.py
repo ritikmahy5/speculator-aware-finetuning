@@ -12,6 +12,7 @@ Supported speculator loss types:
 """
 
 import logging
+import math
 from typing import Optional
 
 import torch
@@ -150,7 +151,7 @@ def _kl_divergence(
 
     # KL(target || draft) = sum_x p_target(x) * (log p_target(x) - log p_draft(x))
     # Clamp draft log probs to avoid -inf
-    draft_log_probs_safe = torch.clamp(draft_log_probs, min=torch.log(torch.tensor(EPSILON)))
+    draft_log_probs_safe = torch.clamp(draft_log_probs, min=math.log(EPSILON))
     kl_per_pos = (target_probs * (target_log_probs - draft_log_probs_safe)).sum(dim=-1)
 
     # Use shifted mask (matching shifted logits for task loss alignment)
@@ -196,7 +197,7 @@ def _reverse_kl_divergence(
         )
 
     # KL(draft || target) = sum_x p_draft(x) * (log p_draft(x) - log p_target(x))
-    target_log_probs_safe = torch.clamp(target_log_probs, min=torch.log(torch.tensor(EPSILON)))
+    target_log_probs_safe = torch.clamp(target_log_probs, min=math.log(EPSILON))
     kl_per_pos = (draft_probs * (draft_log_probs - target_log_probs_safe)).sum(dim=-1)
 
     mask = attention_mask[..., :-1]
