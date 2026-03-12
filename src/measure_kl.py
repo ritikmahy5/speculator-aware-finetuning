@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import math
 import os
 from typing import Optional
 
@@ -51,7 +52,7 @@ def _kl_per_position(
     Returns:
         (seq_len,) KL divergence at each position.
     """
-    draft_log_safe = torch.clamp(draft_log_probs, min=torch.log(torch.tensor(EPSILON)))
+    draft_log_safe = torch.clamp(draft_log_probs, min=math.log(EPSILON))
     return (target_probs * (target_log_probs - draft_log_safe)).sum(dim=-1)
 
 
@@ -70,7 +71,7 @@ def _reverse_kl_per_position(
     Returns:
         (seq_len,) reverse KL divergence at each position.
     """
-    target_log_safe = torch.clamp(target_log_probs, min=torch.log(torch.tensor(EPSILON)))
+    target_log_safe = torch.clamp(target_log_probs, min=math.log(EPSILON))
     return (draft_probs * (draft_log_probs - target_log_safe)).sum(dim=-1)
 
 
@@ -212,6 +213,12 @@ def measure_divergence(
         # Logits: (1, seq_len, vocab_size) -> squeeze batch dim
         target_logits = target_out.logits[0]  # (seq_len, vocab_size)
         draft_logits = draft_out.logits[0].to(target_device)  # move to same device
+
+        # Align vocab sizes if models have different vocabularies
+        if target_logits.size(-1) != draft_logits.size(-1):
+            min_vocab = min(target_logits.size(-1), draft_logits.size(-1))
+            target_logits = target_logits[..., :min_vocab]
+            draft_logits = draft_logits[..., :min_vocab]
 
         # Convert to probs and log-probs
         target_probs = F.softmax(target_logits, dim=-1)
