@@ -1,0 +1,55 @@
+# Local-only planning/reference files (NOT for public repo)
+CLAUDE.md
+RESEARCH.md
+BASELINES_AND_IMPACT.md
+OPERATIONS.md
+docs_research_plan.md
+Speculator_Aware_FT_Research_Plan.docx
+Together_AI_Pitch_Strategy.docx
+.claude/
+
+# Model checkpoints and weights
+results/*/final/
+results/*/checkpoints/
+*.safetensors
+*.bin
+*.pt
+*.pth
+
+# SLURM logs
+logs/*.out
+logs/*.err
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+venv/
+env/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Wandb
+wandb/
+
+# HuggingFace cache
+.cache/

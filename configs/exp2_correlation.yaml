@@ -1,0 +1,51 @@
+# EXP-2: KL–Acceptance Rate Correlation
+experiment_id: "EXP-2"
+hypothesis: "H2 — KL divergence correlates with acceptance rate (|r| > 0.85)"
+
+models:
+  target: "meta-llama/Llama-3.1-8B-Instruct"
+  draft: "meta-llama/Llama-3.1-1B-Instruct"
+
+domain: "code"
+
+training:
+  num_epochs: 1
+  batch_size: 4
+  gradient_accumulation_steps: 4
+  learning_rate: 2.0e-4
+  weight_decay: 0.01
+  warmup_ratio: 0.05
+  max_seq_len: 1024
+  max_samples: 10000
+  scheduler: "cosine"
+  max_grad_norm: 1.0
+  bf16: true
+  seed: 42
+
+lora:
+  rank: 16
+  alpha: 32
+  dropout: 0.05
+  target_modules:
+    - q_proj
+    - k_proj
+    - v_proj
+    - o_proj
+    - gate_proj
+    - up_proj
+    - down_proj
+
+spec_loss:
+  lam: 0.0
+  loss_type: "kl"
+
+checkpoints:
+  save_at_fractions: [0.25, 0.50, 0.75, 1.0]
+
+measurement:
+  divergence_types: ["kl", "js", "tv"]
+  num_prompts_per_domain: 50
+  max_new_tokens: 128
+  draft_k: 5
+
+output_dir: "results/exp2"

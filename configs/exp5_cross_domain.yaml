@@ -1,0 +1,23 @@
+# EXP-5: Cross-Domain Analysis
+experiment_id: "EXP-5"
+hypothesis: "H5 — Optimal lambda varies by domain due to different distributional shift magnitudes"
+
+models:
+  target: "meta-llama/Llama-3.1-8B-Instruct"
+  draft: "meta-llama/Llama-3.1-1B-Instruct"
+
+domains:
+  - "code"
+  - "medical"
+  - "chat"
+
+# Uses best lambda per domain from EXP-4 results
+# Cross-evaluation: train on domain X, measure alpha on domain Y prompts
+
+measurement:
+  num_prompts_per_domain: 50
+  num_mixed_prompts: 50
+  max_new_tokens: 128
+  draft_k: 5
+
+output_dir: "results/exp5"
