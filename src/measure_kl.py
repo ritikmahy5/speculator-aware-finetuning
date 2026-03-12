@@ -8,7 +8,7 @@ Usage::
 
     python -m src.measure_kl \
         --target_model meta-llama/Llama-3.1-8B-Instruct \
-        --draft_model  meta-llama/Llama-3.1-1B-Instruct \
+        --draft_model  meta-llama/Llama-3.2-1B-Instruct \
         --prompts_file configs/eval_prompts.yaml \
         --domain code \
         --output results/exp1/eval_kl.json
