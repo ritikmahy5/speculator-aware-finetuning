@@ -51,7 +51,135 @@
 ### Issues encountered
 - None yet — all modules implemented without errors
 
-### What's next (Day 2)
-- Run smoke test on Explorer cluster to verify end-to-end pipeline
-- Begin EXP-1: measure base acceptance rate, then fine-tune on code domain
-- Start collecting real experimental data
+---
+
+## 2026-03-12 — Cluster Deployment, Smoke Test & EXP-1
+
+### Model Switch: Llama → Qwen
+
+**Problem:** `meta-llama/Llama-3.1-8B-Instruct` is gated on HuggingFace — access request submitted but pending approval. Also discovered `Llama-3.1-1B-Instruct` doesn't exist; the 1B model shipped with Llama 3.2 (`Llama-3.2-1B-Instruct`).
+
+**Decision:** Switched to ungated Qwen models as primary, will re-run with Llama when approved:
+
+| Role | Model | Vocab Size |
+|------|-------|-----------|
+| Target | `Qwen/Qwen2.5-7B-Instruct` | 152,064 |
+| Draft | `Qwen/Qwen2.5-0.5B-Instruct` | 151,936 |
+
+Updated: `configs/models.yaml`, all 7 experiment configs, `README.md`.
+
+**Vocab size mismatch (152,064 vs 151,936):** Qwen 7B and 0.5B have different vocabulary sizes. Fixed by truncating both logit tensors to `min(target_vocab, draft_vocab)` before spec loss and KL computation. Task loss uses full target logits (unaffected).
+
+### Dataset Switch
+
+**Problem:** `bigcode/starcoderdata` is gated.
+
+**Decision:** Switched code domain to `iamtarun/python_code_instructions_18k_alpaca` (ungated). Updated `src/data.py` text extraction to use instruction+output fields.
+
+### Bug Fixes Before Deployment
+
+1. **Device mismatch in `spec_loss.py` and `measure_kl.py`:** `torch.log(torch.tensor(EPSILON))` creates a CPU tensor even when model is on GPU. Fixed by using `math.log(EPSILON)` (Python float, device-agnostic).
+
+2. **Vocab alignment in `spec_loss.py`:** Added truncation to `min(target_vocab, draft_vocab)` for spec loss and acceptance proxy computation.
+
+3. **Same vocab alignment fix in `measure_kl.py`:** Applied identical truncation after logit extraction.
+
+### Explorer Cluster Setup
+
+- **SSH:** `mahyavanshi.r@login.explorer.northeastern.edu`
+- **Conda env:** `/scratch/mahyavanshi.r/envs/specaware` (Python 3.11, PyTorch 2.5.1+cu121)
+- **Repo cloned to:** `/scratch/mahyavanshi.r/speculator-aware-finetuning`
+- **HF cache:** `/scratch/mahyavanshi.r/.cache/huggingface`
+- **SLURM fixes needed:** `cuda/12.1` → `cuda/12.1.1`, added `source .../conda.sh` before `conda activate`
+
+### Smoke Test
+
+Ran on A100 (40GB) via `sbatch scripts/slurm_smoke_test.sh`. All 5 steps passed:
+1. Training (100 samples, lam=0.0) — OK
+2. Spec-aware training (100 samples, lam=0.1) — OK
+3. Acceptance measurement — OK
+4. KL measurement — OK
+5. Plot generation — OK
+
+### EXP-1: Baseline Degradation Measurement
+
+**Setup:** SLURM job 5038845 on H200 (140GB, node d4055). Single-GPU mode (both models on `cuda:0`). Runtime: ~3 hours.
+
+**Configuration:** Standard LoRA fine-tuning (lam=0.0), 1 epoch, 10K samples per domain, batch_size=4, grad_accum=4, lr=2e-4, max_seq_len=1024.
+
+#### Results: Base Model Acceptance Rates
+
+| Domain | α (mean) | α (std) | KL | JS | TV |
+|--------|----------|---------|------|------|------|
+| Code | 0.5203 | 0.1627 | 0.4248 | 0.0877 | 0.2427 |
+| Medical | 0.3103 | 0.0587 | 0.6683 | 0.1250 | 0.3075 |
+| Chat | 0.2546 | 0.0574 | 0.7205 | 0.1375 | 0.3479 |
+| Mixed | 0.3305 | 0.1476 | 0.6430 | 0.1248 | 0.3180 |
+
+**Observation:** Code domain has highest base acceptance (0.52) and lowest KL (0.42), suggesting the Qwen 7B/0.5B pair is already most aligned on code-like text. Chat has worst acceptance (0.25) and highest KL (0.72).
+
+#### Results: After Standard LoRA Fine-Tuning (Same-Domain Eval)
+
+| FT Domain | Base α | FT α | Δα | Relative Δ |
+|-----------|--------|------|-----|-----------|
+| Code | 0.5203 | 0.5495 | +0.0292 | +5.6% |
+| Medical | 0.3103 | 0.3260 | +0.0157 | +5.1% |
+| Chat | 0.2546 | 0.2902 | +0.0356 | +14.0% |
+
+#### Results: Cross-Domain Acceptance Rate Matrix (α after FT)
+
+| FT Domain \ Eval | Code | Medical | Chat | Mixed |
+|-------------------|------|---------|------|-------|
+| Base (no FT) | 0.5203 | 0.3103 | 0.2546 | 0.3305 |
+| Code-FT | **0.5495** | 0.3242 | 0.2759 | 0.3573 |
+| Medical-FT | 0.5145 | **0.3260** | 0.2826 | 0.3634 |
+| Chat-FT | 0.5235 | 0.3261 | **0.2902** | 0.3589 |
+
+#### Results: KL Divergence After Fine-Tuning (Same-Domain Eval)
+
+| FT Domain | Base KL | FT KL | ΔKL |
+|-----------|---------|-------|-----|
+| Code | 0.4248 | 0.6279 | +0.2031 |
+| Medical | 0.6683 | 0.7310 | +0.0627 |
+| Chat | 0.7205 | 0.8496 | +0.1291 |
+
+### Key Finding from EXP-1
+
+**The expected degradation did NOT occur.** Success criteria was "α drops by >15% relative for at least one domain" — instead, acceptance rates slightly *increased* across all domains after standard LoRA fine-tuning.
+
+**Interpretation:** 1 epoch of LoRA fine-tuning with rank=16 on 10K samples produces insufficient distribution shift to measurably degrade speculative decoding acceptance rates with the Qwen 7B/0.5B pair. The KL divergence does increase (especially for code: +0.2031), but this increase doesn't translate into lower acceptance rates.
+
+**Possible explanations:**
+1. LoRA rank=16 constrains the fine-tuning to a low-rank subspace, limiting distribution shift
+2. 1 epoch / 10K samples is too little data to cause significant drift
+3. The Qwen 7B/0.5B pair already has low base acceptance (especially medical/chat at ~0.25-0.31), leaving little room for further degradation
+4. Acceptance rate (which depends on argmax agreement) may be more robust than KL (which measures full distributional shift)
+
+**This is still a useful finding** — it establishes that lightweight LoRA fine-tuning is relatively safe for speculative decoding compatibility, at least for this model pair and training configuration.
+
+### Plot Generation Issue
+
+`src/analyze_results.py` expected filename `acceptance_base.json` but `run_exp1.sh` produces per-domain files (`acceptance_base_code.json`, etc.). Fixed to support both naming conventions.
+
+### Next Steps
+
+EXP-2 (KL-Acceptance Correlation) and EXP-3 (Speculator-Aware FT) submitted in parallel:
+- EXP-2: SLURM job 5042692 on H200
+- EXP-3: SLURM job 5042693 on H200
+
+EXP-2 will provide more data points (checkpoints at 25/50/75/100%) to establish whether the KL-α correlation holds. EXP-3 will test whether the speculator-aware loss (lam=0.1) provides any benefit even when baseline degradation is minimal.
+
+### Git Commits (2026-03-12)
+
+| Hash | Description |
+|------|-------------|
+| `be166fa` | Fix draft model ID: Llama-3.1-1B → Llama-3.2-1B |
+| `c1a2c26` | Switch to Qwen2.5 models (ungated) |
+| `f9694b6` | Fix SLURM scripts for Explorer cluster |
+| `bbe5924` | Switch code dataset to ungated python_code_instructions_18k_alpaca |
+| `ac35878` | Request H200 GPU for smoke test |
+| `16a5d11` | Use A100 for smoke test (H200s unavailable) |
+| `5912cf4` | Fix device mismatch in spec_loss clamp |
+| `cd967d1` | Handle mismatched vocab sizes between target and draft models |
+| `16b0fc6` | Fix device mismatch and vocab size alignment in measure_kl.py |
+| `f613283` | Fix analyze_results.py to match per-domain file naming |
