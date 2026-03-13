@@ -19,8 +19,9 @@ cd /scratch/$USER/speculator-aware-finetuning
 cp configs/models.yaml configs/models_qwen_backup.yaml
 cp configs/models_llama.yaml configs/models.yaml
 
-# Override results directory to keep Llama results separate
+# Override results directory and training config for Llama
 export EXP1_RESULTS_DIR="results/exp1_llama"
+export EXP1_CONFIG="configs/exp1_baseline_llama.yaml"
 
 bash scripts/run_exp1.sh
 

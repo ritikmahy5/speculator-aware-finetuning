@@ -101,7 +101,7 @@ for DOMAIN in code medical chat; do
 
     echo ">>> Step ${STEP_NUM}/7: Fine-tuning on $DOMAIN domain (lam=0.0)"
     python -m src.train \
-        --config configs/exp1_baseline.yaml \
+        --config "${EXP1_CONFIG:-configs/exp1_baseline.yaml}" \
         --domain "$DOMAIN" \
         --target_device "$DEVICE" \
         --draft_device "$DRAFT_DEVICE" \
