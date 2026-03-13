@@ -153,12 +153,14 @@ tokenizer = AutoTokenizer.from_pretrained(target_model_name)
 if tokenizer.pad_token is None:
     tokenizer.pad_token = tokenizer.eos_token
 
+print(f'  Loading target model {target_model_name} on {device}', flush=True)
 dtype = torch.bfloat16 if torch.cuda.is_available() else torch.float32
 model = AutoModelForCausalLM.from_pretrained(
-    target_model_name, torch_dtype=dtype, device_map={'': device}
-)
-model = PeftModel.from_pretrained(model, adapter_path)
+    target_model_name, torch_dtype=dtype,
+).to(device)
+model = PeftModel.from_pretrained(model, adapter_path).to(device)
 model.eval()
+print(f'  Model loaded successfully', flush=True)
 
 # Generate outputs (cycle through prompts)
 output_file = '$OUTPUT_FILE'
@@ -185,9 +187,9 @@ with open(output_file, 'w') as f:
         f.write(json.dumps({'text': text, 'prompt': prompt}) + '\n')
 
         if (i + 1) % 100 == 0:
-            print(f'  Generated {i + 1}/{num_outputs} outputs')
+            print(f'  Generated {i + 1}/{num_outputs} outputs', flush=True)
 
-print(f'  Saved {num_outputs} outputs to {output_file}')
+print(f'  Saved {num_outputs} outputs to {output_file}', flush=True)
 "
 done
 
@@ -220,13 +222,13 @@ for PIPELINE in standard specaware; do
 
         # Fine-tune draft on generated outputs using a lightweight training run
         python -c "
-import json
+import json, os, sys
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from peft import LoraConfig, get_peft_model
 from torch.optim import AdamW
 
-device = '$DRAFT_DEVICE'
+device = torch.device('$DRAFT_DEVICE')
 draft_model_name = '$DRAFT_MODEL'
 output_file = '$OUTPUT_FILE'
 save_dir = '$DRAFT_ADAPTER_DIR'
@@ -234,15 +236,15 @@ max_steps = $STEPS
 lr = 5e-5
 batch_size = 8
 
-# Load draft model
+print(f'    Loading draft model {draft_model_name} on {device}', flush=True)
 dtype = torch.bfloat16 if torch.cuda.is_available() else torch.float32
 tokenizer = AutoTokenizer.from_pretrained(draft_model_name)
 if tokenizer.pad_token is None:
     tokenizer.pad_token = tokenizer.eos_token
 
 model = AutoModelForCausalLM.from_pretrained(
-    draft_model_name, torch_dtype=dtype, device_map={'': device}
-)
+    draft_model_name, torch_dtype=dtype,
+).to(device)
 
 # Apply LoRA
 lora_config = LoraConfig(
@@ -252,12 +254,14 @@ lora_config = LoraConfig(
 )
 model = get_peft_model(model, lora_config)
 model.train()
+print(f'    Model loaded, trainable params: {sum(p.numel() for p in model.parameters() if p.requires_grad):,}', flush=True)
 
 # Load generated texts
 texts = []
 with open(output_file) as f:
     for line in f:
         texts.append(json.loads(line)['text'])
+print(f'    Loaded {len(texts)} texts from {output_file}', flush=True)
 
 optimizer = AdamW(model.parameters(), lr=lr)
 step = 0
@@ -284,14 +288,13 @@ while step < max_steps:
         optimizer.zero_grad()
         step += 1
 
-        if step % 50 == 0:
-            print(f'    Draft adaptation step {step}/{max_steps}, loss={loss.item():.4f}')
+        if step % 10 == 0:
+            print(f'    Draft adaptation step {step}/{max_steps}, loss={loss.item():.4f}', flush=True)
 
 # Save adapted draft
-import os
 os.makedirs(save_dir, exist_ok=True)
 model.save_pretrained(save_dir)
-print(f'    Saved adapted draft to {save_dir}')
+print(f'    Saved adapted draft to {save_dir}', flush=True)
 "
 
         # Measure acceptance with adapted draft
@@ -321,24 +324,28 @@ draft_device = torch.device('$DRAFT_DEVICE')
 dtype = torch.bfloat16 if torch.cuda.is_available() else torch.float32
 
 # Load target with FT adapter
+print(f'    Loading target model on {target_device}', flush=True)
 tokenizer = AutoTokenizer.from_pretrained(target_model_name)
 if tokenizer.pad_token is None:
     tokenizer.pad_token = tokenizer.eos_token
 
 target_model = AutoModelForCausalLM.from_pretrained(
-    target_model_name, torch_dtype=dtype, device_map={'': target_device}
-)
-target_model = PeftModel.from_pretrained(target_model, target_adapter)
+    target_model_name, torch_dtype=dtype,
+).to(target_device)
+target_model = PeftModel.from_pretrained(target_model, target_adapter).to(target_device)
 target_model.eval()
+print(f'    Target model loaded', flush=True)
 
 # Load draft with adaptation adapter
+print(f'    Loading adapted draft model on {draft_device}', flush=True)
 draft_model = AutoModelForCausalLM.from_pretrained(
-    draft_model_name, torch_dtype=dtype, device_map={'': draft_device}
-)
-draft_model = PeftModel.from_pretrained(draft_model, draft_adapter)
+    draft_model_name, torch_dtype=dtype,
+).to(draft_device)
+draft_model = PeftModel.from_pretrained(draft_model, draft_adapter).to(draft_device)
 draft_model.eval()
 for p in draft_model.parameters():
     p.requires_grad = False
+print(f'    Draft model loaded', flush=True)
 
 # Load prompts
 with open('configs/eval_prompts.yaml') as f:
@@ -365,7 +372,7 @@ output_path = '$EXP_DIR/acceptance_${PIPELINE}_ft_step_${STEPS}.json'
 os.makedirs(os.path.dirname(output_path), exist_ok=True)
 with open(output_path, 'w') as f:
     json.dump(results, f, indent=2)
-print(f'    alpha={results[\"alpha\"]:.4f} at step $STEPS')
+print(f'    alpha={results[\"alpha\"]:.4f} at step $STEPS', flush=True)
 "
         echo ""
     done
