@@ -4,7 +4,7 @@
 #SBATCH --gres=gpu:h200:1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=64GB
-#SBATCH --time=12:00:00
+#SBATCH --time=08:00:00
 #SBATCH --job-name=specaware_exp7
 #SBATCH --output=logs/exp7_%j.out
 #SBATCH --error=logs/exp7_%j.err
