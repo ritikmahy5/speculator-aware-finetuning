@@ -142,7 +142,7 @@ from peft import PeftModel
 # Load eval prompts for generation seeds
 with open('configs/eval_prompts.yaml') as f:
     prompts_data = yaml.safe_load(f)
-code_prompts = prompts_data.get('code', [])
+code_prompts = prompts_data.get('code_prompts', [])
 
 # Load target model with adapter
 target_model_name = '$TARGET_MODEL'
@@ -343,7 +343,7 @@ for p in draft_model.parameters():
 # Load prompts
 with open('configs/eval_prompts.yaml') as f:
     prompts_data = yaml.safe_load(f)
-prompts = prompts_data.get('code', [])[:50]
+prompts = prompts_data.get('code_prompts', [])[:50]
 
 results = measure_acceptance_rate(
     target_model=target_model,

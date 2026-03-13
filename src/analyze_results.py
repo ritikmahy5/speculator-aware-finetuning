@@ -12,6 +12,12 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+
+try:
+    import yaml
+    _HAS_YAML = True
+except ImportError:
+    _HAS_YAML = False
 from pathlib import Path
 from typing import Any, Optional
 
@@ -50,19 +56,36 @@ DOMAINS = ["code", "medical", "chat"]
 # ---------------------------------------------------------------------------
 
 def _load_json(path: Path) -> dict[str, Any] | list[Any] | None:
-    """Load a JSON file, returning None if it does not exist.
+    """Load a JSON or YAML file, returning None if it does not exist or fails to parse.
+
+    If the file extension is ``.yaml`` or ``.yml``, attempts to parse with
+    ``yaml.safe_load`` first (requires PyYAML). Falls back gracefully to
+    ``None`` with a warning on any parse error.
 
     Args:
-        path: Path to the JSON file.
+        path: Path to the JSON or YAML file.
 
     Returns:
-        Parsed JSON content, or None if the file is missing.
+        Parsed content, or None if the file is missing or cannot be parsed.
     """
     if not path.exists():
         logger.warning("File not found: %s", path)
         return None
-    with open(path, "r") as f:
-        return json.load(f)
+    try:
+        with open(path, "r") as f:
+            if path.suffix in (".yaml", ".yml"):
+                if _HAS_YAML:
+                    return yaml.safe_load(f)
+                else:
+                    logger.warning("PyYAML not installed; cannot parse %s", path)
+                    return None
+            return json.load(f)
+    except (json.JSONDecodeError, ValueError) as exc:
+        logger.warning("Failed to parse %s: %s", path, exc)
+        return None
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Unexpected error reading %s: %s", path, exc)
+        return None
 
 
 def _setup_style() -> None:
