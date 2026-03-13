@@ -50,7 +50,7 @@ echo "Target model: $TARGET_MODEL"
 echo "Draft model:  $DRAFT_MODEL"
 echo ""
 
-EXP_DIR="results/exp1"
+EXP_DIR="${EXP1_RESULTS_DIR:-results/exp1}"
 mkdir -p "$EXP_DIR"
 
 # ====================================================================
