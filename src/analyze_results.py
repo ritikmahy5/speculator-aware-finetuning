@@ -128,18 +128,14 @@ def _add_bar_labels(ax: plt.Axes, fmt: str = ".2f") -> None:
 def plot_degradation(results_dir: Path, output_dir: Path) -> None:
     """Generate bar chart of acceptance rate per domain, base vs fine-tuned.
 
-    Reads ``results/exp1/acceptance_base.json`` and
-    ``results/exp1/acceptance_{domain}_baseline.json`` for each domain.
+    Reads ``results/exp1/acceptance_base_{domain}.json`` and
+    ``results/exp1/acceptance_{domain}_baseline_eval_{domain}.json`` for each domain.
 
     Args:
         results_dir: Root results directory.
         output_dir: Directory to write plot files.
     """
     exp1_dir = results_dir / "exp1"
-    base_data = _load_json(exp1_dir / "acceptance_base.json")
-    if base_data is None:
-        logger.warning("Skipping plot1_degradation: base acceptance data not found.")
-        return
 
     domains_found: list[str] = []
     base_alphas: list[float] = []
@@ -148,21 +144,29 @@ def plot_degradation(results_dir: Path, output_dir: Path) -> None:
     ft_stds: list[float] = []
 
     for domain in DOMAINS:
-        ft_data = _load_json(exp1_dir / f"acceptance_{domain}_baseline.json")
+        # Try per-domain base file first, then consolidated
+        base_data = _load_json(exp1_dir / f"acceptance_base_{domain}.json")
+        if base_data is None:
+            consolidated = _load_json(exp1_dir / "acceptance_base.json")
+            if consolidated is not None and domain in consolidated:
+                base_data = consolidated[domain]
+            elif consolidated is not None:
+                base_data = consolidated
+        if base_data is None:
+            continue
+
+        # Try per-domain FT file (naming from run_exp1.sh)
+        ft_data = _load_json(exp1_dir / f"acceptance_{domain}_baseline_eval_{domain}.json")
+        if ft_data is None:
+            ft_data = _load_json(exp1_dir / f"acceptance_{domain}_baseline.json")
         if ft_data is None:
             continue
+
         domains_found.append(domain.capitalize())
-
-        # Support both flat and per-domain keys in base data
-        if domain in base_data:
-            base_alphas.append(base_data[domain].get("mean_alpha", base_data[domain].get("alpha", 0)))
-            base_stds.append(base_data[domain].get("std_alpha", 0))
-        else:
-            base_alphas.append(base_data.get("mean_alpha", base_data.get("alpha", 0)))
-            base_stds.append(base_data.get("std_alpha", 0))
-
+        base_alphas.append(base_data.get("mean_alpha", base_data.get("alpha", 0)))
+        base_stds.append(base_data.get("std_alpha", base_data.get("alpha_std", 0)))
         ft_alphas.append(ft_data.get("mean_alpha", ft_data.get("alpha", 0)))
-        ft_stds.append(ft_data.get("std_alpha", 0))
+        ft_stds.append(ft_data.get("std_alpha", ft_data.get("alpha_std", 0)))
 
     if not domains_found:
         logger.warning("Skipping plot1_degradation: no domain data found.")
@@ -281,13 +285,12 @@ def plot_spec_aware_comparison(results_dir: Path, output_dir: Path) -> None:
         output_dir: Directory to write plot files.
     """
     exp1_dir = results_dir / "exp1"
-    base_data = _load_json(exp1_dir / "acceptance_base.json")
 
     # Try multiple naming conventions for exp3
     exp3_dirs = list(results_dir.glob("exp3*"))
 
-    if base_data is None or not exp3_dirs:
-        logger.warning("Skipping plot3_spec_aware_comparison: required data not found.")
+    if not exp3_dirs:
+        logger.warning("Skipping plot3_spec_aware_comparison: exp3 results not found.")
         return
 
     # Collect data for each domain that has all three measurements
@@ -300,7 +303,21 @@ def plot_spec_aware_comparison(results_dir: Path, output_dir: Path) -> None:
     spec_errs: list[float] = []
 
     for domain in DOMAINS:
-        std_data = _load_json(exp1_dir / f"acceptance_{domain}_baseline.json")
+        # Load base data (per-domain file or consolidated)
+        base_data = _load_json(exp1_dir / f"acceptance_base_{domain}.json")
+        if base_data is None:
+            consolidated = _load_json(exp1_dir / "acceptance_base.json")
+            if consolidated is not None and domain in consolidated:
+                base_data = consolidated[domain]
+            elif consolidated is not None:
+                base_data = consolidated
+        if base_data is None:
+            continue
+
+        # Load standard FT data
+        std_data = _load_json(exp1_dir / f"acceptance_{domain}_baseline_eval_{domain}.json")
+        if std_data is None:
+            std_data = _load_json(exp1_dir / f"acceptance_{domain}_baseline.json")
         if std_data is None:
             continue
 
@@ -309,7 +326,6 @@ def plot_spec_aware_comparison(results_dir: Path, output_dir: Path) -> None:
         for d in exp3_dirs:
             candidate = _load_json(d / "eval_acceptance.json")
             if candidate is not None:
-                # Check if this result is for the current domain
                 if candidate.get("domain") == domain or domain in d.name:
                     spec_data = candidate
                     break
@@ -317,18 +333,12 @@ def plot_spec_aware_comparison(results_dir: Path, output_dir: Path) -> None:
             continue
 
         domains_found.append(domain.capitalize())
-
-        if domain in base_data:
-            base_vals.append(base_data[domain].get("mean_alpha", base_data[domain].get("alpha", 0)))
-            base_errs.append(base_data[domain].get("std_alpha", 0))
-        else:
-            base_vals.append(base_data.get("mean_alpha", base_data.get("alpha", 0)))
-            base_errs.append(base_data.get("std_alpha", 0))
-
+        base_vals.append(base_data.get("mean_alpha", base_data.get("alpha", 0)))
+        base_errs.append(base_data.get("std_alpha", base_data.get("alpha_std", 0)))
         std_vals.append(std_data.get("mean_alpha", std_data.get("alpha", 0)))
-        std_errs.append(std_data.get("std_alpha", 0))
+        std_errs.append(std_data.get("std_alpha", std_data.get("alpha_std", 0)))
         spec_vals.append(spec_data.get("mean_alpha", spec_data.get("alpha", 0)))
-        spec_errs.append(spec_data.get("std_alpha", 0))
+        spec_errs.append(spec_data.get("std_alpha", spec_data.get("alpha_std", 0)))
 
     if not domains_found:
         logger.warning("Skipping plot3_spec_aware_comparison: no complete domain data.")
@@ -741,18 +751,24 @@ def generate_summary_table(results_dir: Path) -> pd.DataFrame:
 
     # EXP-1: baselines
     exp1_dir = results_dir / "exp1"
-    base_data = _load_json(exp1_dir / "acceptance_base.json") if exp1_dir.exists() else None
     for domain in DOMAINS:
-        ft_data = _load_json(exp1_dir / f"acceptance_{domain}_baseline.json") if exp1_dir.exists() else None
+        # Load base acceptance (per-domain file)
+        base_data = _load_json(exp1_dir / f"acceptance_base_{domain}.json") if exp1_dir.exists() else None
+        if base_data is None:
+            consolidated = _load_json(exp1_dir / "acceptance_base.json") if exp1_dir.exists() else None
+            if consolidated is not None:
+                base_data = consolidated.get(domain, consolidated) if domain in consolidated else consolidated
+
+        # Load FT acceptance (per-domain file with eval naming)
+        ft_data = _load_json(exp1_dir / f"acceptance_{domain}_baseline_eval_{domain}.json") if exp1_dir.exists() else None
+        if ft_data is None:
+            ft_data = _load_json(exp1_dir / f"acceptance_{domain}_baseline.json") if exp1_dir.exists() else None
         if ft_data is None:
             continue
 
         base_alpha: Optional[float] = None
         if base_data is not None:
-            if domain in base_data:
-                base_alpha = base_data[domain].get("mean_alpha", base_data[domain].get("alpha"))
-            else:
-                base_alpha = base_data.get("mean_alpha", base_data.get("alpha"))
+            base_alpha = base_data.get("mean_alpha", base_data.get("alpha"))
 
         rows.append({
             "experiment": "EXP-1",
@@ -761,7 +777,7 @@ def generate_summary_table(results_dir: Path) -> pd.DataFrame:
             "lambda": 0.0,
             "base_alpha": base_alpha,
             "alpha": ft_data.get("mean_alpha", ft_data.get("alpha")),
-            "alpha_std": ft_data.get("std_alpha"),
+            "alpha_std": ft_data.get("std_alpha", ft_data.get("alpha_std")),
             "kl": ft_data.get("kl_divergence"),
             "task_perf": None,
         })
