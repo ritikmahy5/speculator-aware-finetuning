@@ -234,6 +234,25 @@ def plot_kl_correlation(results_dir: Path, output_dir: Path) -> None:
                 kl_values.append(kl_val)
                 alpha_values.append(alpha_val)
 
+    # Fallback: try acceptance_*.json + kl_*.json pairs (e.g. acceptance_base.json,
+    # acceptance_step_156.json, acceptance_final.json paired with kl_base.json, etc.)
+    if len(kl_values) < 2:
+        kl_values = []
+        alpha_values = []
+        for acc_file in sorted(exp2_dir.glob("acceptance_*.json")):
+            # Derive the matching kl file: acceptance_X.json -> kl_X.json
+            suffix = acc_file.name[len("acceptance_"):]  # e.g. "base.json", "step_156.json"
+            kl_file = exp2_dir / f"kl_{suffix}"
+            acc_data = _load_json(acc_file)
+            kl_data = _load_json(kl_file)
+            if acc_data is None or kl_data is None:
+                continue
+            alpha_val = acc_data.get("mean_alpha", acc_data.get("alpha", None))
+            kl_val = kl_data.get("kl_mean", kl_data.get("kl_divergence", kl_data.get("kl", None)))
+            if alpha_val is not None and kl_val is not None:
+                alpha_values.append(alpha_val)
+                kl_values.append(kl_val)
+
     if len(kl_values) < 2:
         logger.warning("Skipping plot2_kl_correlation: insufficient data points (%d).", len(kl_values))
         return
@@ -325,11 +344,16 @@ def plot_spec_aware_comparison(results_dir: Path, output_dir: Path) -> None:
         # Find spec-aware results for this domain
         spec_data = None
         for d in exp3_dirs:
+            # Try eval_acceptance.json first (original naming)
             candidate = _load_json(d / "eval_acceptance.json")
+            if candidate is not None and (candidate.get("domain") == domain or domain in d.name):
+                spec_data = candidate
+                break
+            # Fallback: try acceptance_{domain}.json (actual naming from run_exp3.sh)
+            candidate = _load_json(d / f"acceptance_{domain}.json")
             if candidate is not None:
-                if candidate.get("domain") == domain or domain in d.name:
-                    spec_data = candidate
-                    break
+                spec_data = candidate
+                break
         if spec_data is None:
             continue
 
@@ -403,6 +427,8 @@ def plot_pareto(results_dir: Path, output_dir: Path, domain: str) -> None:
     else:
         for run_dir in sorted(exp4_dir.glob(f"{domain}_lam_*")):
             acc_data = _load_json(run_dir / "eval_acceptance.json")
+            if acc_data is None:
+                acc_data = _load_json(run_dir / f"acceptance_{domain}.json")
             cfg_data = _load_json(run_dir / "config.yaml")  # may be YAML, handle JSON
             metrics_data = _load_json(run_dir / "training_metrics.json")
 
@@ -502,6 +528,8 @@ def plot_pareto_overlay(results_dir: Path, output_dir: Path) -> None:
         else:
             for run_dir in sorted(exp4_dir.glob(f"{domain}_lam_*")):
                 acc_data = _load_json(run_dir / "eval_acceptance.json")
+                if acc_data is None:
+                    acc_data = _load_json(run_dir / f"acceptance_{domain}.json")
                 if acc_data is None:
                     continue
                 alpha_val = acc_data.get("mean_alpha", acc_data.get("alpha", None))
@@ -787,6 +815,19 @@ def generate_summary_table(results_dir: Path) -> pd.DataFrame:
     for exp3_dir in sorted(results_dir.glob("exp3*")):
         acc_data = _load_json(exp3_dir / "eval_acceptance.json")
         if acc_data is None:
+            # Fallback: try acceptance_{domain}.json patterns
+            for d in DOMAINS:
+                if d in exp3_dir.name:
+                    acc_data = _load_json(exp3_dir / f"acceptance_{d}.json")
+                    break
+            # Try all domains if dir name doesn't hint at one
+            if acc_data is None:
+                for d in DOMAINS:
+                    candidate = _load_json(exp3_dir / f"acceptance_{d}.json")
+                    if candidate is not None:
+                        acc_data = candidate
+                        break
+        if acc_data is None:
             continue
         cfg_data = _load_json(exp3_dir / "config.yaml")
         domain = acc_data.get("domain", "unknown")
@@ -822,6 +863,14 @@ def generate_summary_table(results_dir: Path) -> pd.DataFrame:
     if exp4_dir.exists():
         for run_dir in sorted(exp4_dir.glob("*_lam_*")):
             acc_data = _load_json(run_dir / "eval_acceptance.json")
+            if acc_data is None:
+                # Fallback: try acceptance_{domain}.json where domain is from dir name
+                try:
+                    dir_domain = run_dir.name.split("_lam_")[0]
+                except (IndexError, ValueError):
+                    dir_domain = None
+                if dir_domain:
+                    acc_data = _load_json(run_dir / f"acceptance_{dir_domain}.json")
             if acc_data is None:
                 continue
             try:

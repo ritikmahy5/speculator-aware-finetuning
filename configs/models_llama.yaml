@@ -1,0 +1,43 @@
+# Model configuration defaults — Llama variant
+models:
+  target: "meta-llama/Llama-3.1-8B-Instruct"
+  draft: "meta-llama/Llama-3.2-1B-Instruct"
+
+lora:
+  rank: 16
+  alpha: 32
+  dropout: 0.05
+  target_modules:
+    - q_proj
+    - k_proj
+    - v_proj
+    - o_proj
+    - gate_proj
+    - up_proj
+    - down_proj
+
+training:
+  num_epochs: 1
+  batch_size: 4
+  gradient_accumulation_steps: 4
+  learning_rate: 2.0e-4
+  weight_decay: 0.01
+  warmup_ratio: 0.05
+  max_seq_len: 1024
+  max_samples: 10000
+  scheduler: "cosine"
+  max_grad_norm: 1.0
+  bf16: true
+  seed: 42
+
+spec_loss:
+  lam: 0.1
+  loss_type: "kl"
+  temperature: 1.0
+  top_k: null
+
+logging:
+  log_every: 10
+  save_checkpoints_every: 500
+  measure_acceptance_every: 200
+  wandb: false
