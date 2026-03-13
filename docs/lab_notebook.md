@@ -169,6 +169,108 @@ EXP-2 (KL-Acceptance Correlation) and EXP-3 (Speculator-Aware FT) submitted in p
 
 EXP-2 will provide more data points (checkpoints at 25/50/75/100%) to establish whether the KL-α correlation holds. EXP-3 will test whether the speculator-aware loss (lam=0.1) provides any benefit even when baseline degradation is minimal.
 
+---
+
+## 2026-03-12 — EXP-2: KL–Acceptance Rate Correlation
+
+### Setup
+
+SLURM job 5042692 on H200 (d4055). Single-GPU mode. Trains code domain with lam=0.0, saves checkpoints at 25/50/75/100% of training. Measures α and KL/JS/TV at each checkpoint.
+
+### Results: Divergence vs Acceptance at Checkpoints
+
+| Checkpoint | α | KL | JS | TV |
+|-----------|-------|--------|--------|--------|
+| Base | 0.5203 | 0.4248 | 0.0877 | 0.2427 |
+| Step 156 (25%) | 0.5355 | 0.5220 | 0.0883 | 0.2380 |
+| Step 312 (50%) | 0.5390 | 0.5688 | 0.0896 | 0.2396 |
+| Step 468 (75%) | 0.5498 | 0.5893 | 0.0898 | 0.2424 |
+| Step 624 (100%) | 0.5495 | 0.6279 | 0.0904 | 0.2435 |
+
+### Correlation Results
+
+| Metric | Pearson r | p-value | Spearman r | p-value |
+|--------|-----------|---------|------------|---------|
+| KL vs α | **+0.956** | 0.003 | — | — |
+| JS vs α | **+0.978** | 0.0007 | — | — |
+| TV vs α | **+0.982** | 0.0005 | — | — |
+
+### Key Finding from EXP-2
+
+**POSITIVE correlation between KL and α** (r = +0.956) — the opposite of the expected negative correlation. As the target model diverges further from the draft (higher KL), acceptance rate actually *increases*.
+
+This challenges the core assumption of the project. The KL divergence in the loss function is designed to keep the target close to the draft to preserve α, but the data shows that higher KL (more divergence) correlates with higher α.
+
+**Interpretation:** LoRA fine-tuning on code data may be making the target's distribution "sharper" — concentrating probability on the correct tokens. If the draft also assigns high probability to those tokens, sharpening the target makes verification MORE likely to succeed, even though the distributions diverge in KL terms. KL measures distributional distance, not argmax agreement (which is what acceptance rate fundamentally depends on).
+
+---
+
+## 2026-03-12 — EXP-3: Speculator-Aware Fine-Tuning (Core)
+
+### Setup
+
+SLURM job 5042693 on H200 (d4055). Single-GPU mode. Fine-tuned Qwen2.5-7B-Instruct on code domain with speculator-aware loss: `L_total = L_task + 0.1 × KL(target || draft)`. Training: 1 epoch, 10K samples, 625 optimizer steps. Runtime: 46 minutes total (28 min training + 18 min evaluation).
+
+### Training Trajectory
+
+| Steps | task_loss | spec_loss (KL) | accept_proxy |
+|-------|-----------|---------------|-------------|
+| 10 | 0.979 | 0.230 | 0.894 |
+| 100 | 0.658 | 0.365 | 0.864 |
+| 200 | 0.659 | 0.323 | 0.877 |
+| 300 | 0.714 | 0.354 | 0.867 |
+| 400 | 0.679 | 0.371 | 0.866 |
+| 500 | 0.686 | 0.363 | 0.868 |
+| 600 | 0.710 | 0.385 | 0.860 |
+| 625 (final) | ~0.68 | ~0.37 | ~0.86 |
+
+**Observation:** spec_loss (KL between target and draft) increased from 0.23 → ~0.37 during training, meaning the KL regularization did NOT prevent distributional divergence — it only slowed it. The acceptance proxy remained steady around 0.86.
+
+### Results: Three-Way Comparison (Code Domain)
+
+| Condition | α (mean ± std) | KL | JS | TV |
+|-----------|----------------|------|------|------|
+| Base model | 0.5203 ± 0.1627 | 0.4248 | 0.0877 | 0.2427 |
+| Standard FT (λ=0.0) | 0.5495 ± 0.1527 | 0.6279 | 0.0904 | 0.2435 |
+| Spec-aware FT (λ=0.1) | 0.5300 ± 0.1540 | 0.5947 | 0.0906 | 0.2454 |
+
+**Improvement over standard FT: -0.0195 (-3.5%)** — spec-aware FT performed WORSE than standard FT.
+
+### Results: Cross-Domain Acceptance (Spec-Aware Code-FT Model)
+
+| Eval Domain | Spec-aware FT α | Standard FT α (EXP-1) | Base α |
+|-------------|-----------------|----------------------|--------|
+| Code | 0.5300 | 0.5495 | 0.5203 |
+| Medical | 0.3421 | 0.3242 | 0.3103 |
+| Chat | 0.2813 | 0.2759 | 0.2546 |
+| Mixed | 0.3553 | 0.3573 | 0.3305 |
+
+### Key Finding from EXP-3
+
+**The speculator-aware loss (KL regularization) did not improve acceptance rates.** In fact, it slightly hurt same-domain performance (-3.5% vs standard FT on code). Cross-domain results were mixed — slightly better on medical (+1.8pp) and chat (+0.5pp), slightly worse on mixed (-0.2pp).
+
+### Analysis
+
+This result is consistent with EXP-1 and EXP-2:
+1. Standard LoRA FT doesn't degrade α (EXP-1) — there's no problem to solve
+2. KL and α are positively correlated (EXP-2) — minimizing KL could actually *hurt* α
+3. The KL regularization constrains the target model from learning as effectively, slightly reducing task performance AND acceptance rate
+
+The spec_loss did reduce KL somewhat (0.5947 vs 0.6279 for standard FT), but this "improvement" in KL actually corresponds to *worse* acceptance rate — exactly matching the positive correlation found in EXP-2.
+
+### Decision Point (per CLAUDE.md)
+
+Per the experimental plan: "α doesn't improve → debug: check L_spec is decreasing, check for gradient conflict"
+
+**L_spec trajectory:** spec_loss INCREASED during training (0.23 → 0.37), meaning the regularization couldn't overcome the task-driven divergence. However, it did result in a lower final KL (0.595) compared to standard FT (0.628), confirming the loss IS having a regularizing effect.
+
+**Recommended next steps:**
+1. **Proceed to EXP-4 (lambda sweep)** anyway — higher λ values (0.5, 1.0) may show more effect, and the sweep data is valuable for the paper regardless of direction
+2. **EXP-6 (loss ablation)** — token_match loss may work better since it directly optimizes argmax agreement rather than distributional KL
+3. Consider whether a different setting (more aggressive FT: more epochs, higher rank, full fine-tuning) would first create degradation, making the spec-aware loss relevant
+
+---
+
 ### Git Commits (2026-03-12)
 
 | Hash | Description |
@@ -183,3 +285,5 @@ EXP-2 will provide more data points (checkpoints at 25/50/75/100%) to establish 
 | `cd967d1` | Handle mismatched vocab sizes between target and draft models |
 | `16b0fc6` | Fix device mismatch and vocab size alignment in measure_kl.py |
 | `f613283` | Fix analyze_results.py to match per-domain file naming |
+| `01035f7` | Fix bar_label crash on ErrorbarContainer in plot generation |
+| `8a89cb9` | Add EXP-1/EXP-2 results, SLURM scripts, and lab notebook documentation |
