@@ -118,7 +118,8 @@ def _add_bar_labels(ax: plt.Axes, fmt: str = ".2f") -> None:
         fmt: Format string for the numeric labels.
     """
     for container in ax.containers:
-        ax.bar_label(container, fmt=f"%{fmt}", padding=3, fontsize=10)
+        if hasattr(container, 'patches'):
+            ax.bar_label(container, fmt=f"%{fmt}", padding=3, fontsize=10)
 
 
 # ---------------------------------------------------------------------------
