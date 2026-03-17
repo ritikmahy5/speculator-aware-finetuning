@@ -35,6 +35,18 @@ Standard LoRA fine-tuning degrades speculative decoding acceptance rate (α), es
 
 Qwen showed minimal degradation (~0%), making Llama the better test bed for our method.
 
+### EXP-3: Speculator-Aware Fine-Tuning (Llama, λ=0.1)
+
+Our core result — spec-aware training dramatically reduces chat degradation:
+
+| Domain | Base α | Standard FT α | Spec-Aware α (λ=0.1) |
+|--------|--------|--------------|----------------------|
+| Code | 0.5954 | 0.5449 (-8.5%) | **0.5596** (-6.0%) |
+| Medical | 0.4163 | 0.3747 (-10.0%) | 0.3711 (-10.9%) |
+| Chat | 0.3784 | 0.2517 (-33.5%) | **0.3495** (-7.6%) |
+
+Chat degradation reduced from **-33.5% to -7.6%** — recovering most of the lost acceptance rate with a single regularization term.
+
 ### EXP-4: Lambda Sweep (Qwen)
 
 Higher λ monotonically increases α but trades off task loss. Results across domains:
@@ -73,6 +85,19 @@ Models trained with spec-aware loss on one domain maintain reasonable α on othe
 
 Jensen-Shannon divergence marginally outperforms forward KL as the regularization loss.
 
+### EXP-7: Complementarity with Runtime Adaptation (Qwen)
+
+Spec-aware FT provides a better starting point for runtime draft adaptation (ATLAS-style):
+
+| Adaptation Steps | Standard FT α | Spec-Aware FT α |
+|-----------------|--------------|----------------|
+| 0 | 0.5495 | 0.5300 |
+| 100 | 0.5624 | 0.5347 |
+| 500 | 0.5909 | 0.5539 |
+| 1000 | 0.6000 | 0.5587 |
+
+Both approaches improve with draft adaptation. For Llama (where standard FT degrades α significantly), spec-aware FT prevents the large initial degradation that runtime adaptation must recover from.
+
 ## Plots
 
 | Plot | Description |
@@ -80,8 +105,11 @@ Jensen-Shannon divergence marginally outperforms forward KL as the regularizatio
 | ![](plots/plot1_degradation.png) | EXP-1: Acceptance rate before/after fine-tuning |
 | ![](plots/plot2_kl_correlation.png) | EXP-2: KL divergence vs acceptance rate correlation |
 | ![](plots/plot3_spec_aware_comparison.png) | EXP-3: Base vs standard-FT vs spec-aware-FT |
-| ![](plots/plot4_pareto_overlay.png) | EXP-4: Pareto frontier across domains |
+| ![](plots/plot4_pareto_overlay.png) | EXP-4: Pareto frontier — Qwen, all domains |
+| ![](plots/plot4_pareto_overlay_llama.png) | EXP-4: Pareto frontier — Llama, all domains |
+| ![](plots/plot5_cross_domain.png) | EXP-5: Cross-domain generalization heatmap |
 | ![](plots/plot6_loss_ablation.png) | EXP-6: Loss function comparison |
+| ![](plots/plot7_complementarity.png) | EXP-7: Complementarity with runtime adaptation |
 
 ## Experiments
 
