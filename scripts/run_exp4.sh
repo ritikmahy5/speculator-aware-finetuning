@@ -62,7 +62,7 @@ echo "Target model: $TARGET_MODEL"
 echo "Draft model:  $DRAFT_MODEL"
 echo ""
 
-EXP_DIR="results/exp4"
+EXP_DIR="${EXP4_RESULTS_DIR:-results/exp4}"
 mkdir -p "$EXP_DIR"
 
 # --- Define sweep parameters ---
@@ -111,7 +111,7 @@ for DOMAIN in $DOMAINS; do
         # Fine-tune
         echo "  -> Fine-tuning..."
         python -m src.train \
-            --config configs/exp4_lambda_sweep.yaml \
+            --config "${EXP4_CONFIG:-configs/exp4_lambda_sweep.yaml}" \
             --domain "$DOMAIN" \
             --target_device "$DEVICE" \
             --draft_device "$DRAFT_DEVICE" \

@@ -16,31 +16,80 @@ The draft model is frozen and loaded alongside the target during training. It pr
 
 ## Models
 
-| Role | Model | Size |
-|------|-------|------|
-| Target | `Qwen/Qwen2.5-7B-Instruct` | 8B |
-| Draft | `Qwen/Qwen2.5-0.5B-Instruct` | 1B |
+| Role | Qwen (primary) | Llama (secondary) |
+|------|----------------|-------------------|
+| Target | `Qwen/Qwen2.5-7B-Instruct` | `meta-llama/Llama-3.1-8B-Instruct` |
+| Draft | `Qwen/Qwen2.5-0.5B-Instruct` | `meta-llama/Llama-3.2-1B-Instruct` |
+
+## Key Results
+
+### EXP-1: Baseline Degradation
+
+Standard LoRA fine-tuning degrades speculative decoding acceptance rate (α), especially with Llama models:
+
+| Domain | Llama Base α | Llama Post-FT α | Relative Drop |
+|--------|-------------|-----------------|---------------|
+| Code | 0.5954 | 0.5449 | -8.5% |
+| Medical | 0.4163 | 0.3747 | -10.0% |
+| Chat | 0.3784 | 0.2517 | **-33.5%** |
+
+Qwen showed minimal degradation (~0%), making Llama the better test bed for our method.
+
+### EXP-4: Lambda Sweep (Qwen)
+
+Higher λ monotonically increases α but trades off task loss. Results across domains:
+
+| Domain | λ=0.01 α | λ=0.1 α | λ=1.0 α | Base α |
+|--------|---------|---------|---------|--------|
+| Code | 0.5405 | 0.5300 | 0.5939 | 0.5203 |
+| Medical | 0.3340 | 0.3559 | 0.4556 | 0.3103 |
+| Chat | 0.2918 | 0.3030 | 0.3377 | 0.2546 |
+
+### EXP-5: Cross-Domain Generalization (Qwen)
+
+Models trained with spec-aware loss on one domain maintain reasonable α on other domains:
+
+![Cross-Domain Heatmap](plots/plot5_cross_domain.png)
+
+### EXP-6: Loss Function Ablation (Qwen, λ=0.01)
+
+| Loss Type | α | Ranking |
+|-----------|------|---------|
+| JS | 0.5509 | Best |
+| Token Match | 0.5487 | 2nd |
+| TV | 0.5468 | 3rd |
+| KL | 0.5405 | 4th |
+| Reverse KL | 0.5300 | Worst |
+
+Jensen-Shannon divergence marginally outperforms forward KL as the regularization loss.
+
+## Plots
+
+| Plot | Description |
+|------|-------------|
+| ![](plots/plot1_degradation.png) | EXP-1: Acceptance rate before/after fine-tuning |
+| ![](plots/plot2_kl_correlation.png) | EXP-2: KL divergence vs acceptance rate correlation |
+| ![](plots/plot3_spec_aware_comparison.png) | EXP-3: Base vs standard-FT vs spec-aware-FT |
+| ![](plots/plot4_pareto_overlay.png) | EXP-4: Pareto frontier across domains |
+| ![](plots/plot6_loss_ablation.png) | EXP-6: Loss function comparison |
 
 ## Experiments
 
-| # | Experiment | Status |
-|---|-----------|--------|
-| 1 | Baseline degradation measurement | Pending |
-| 2 | KL–acceptance rate correlation | Pending |
-| 3 | Speculator-aware fine-tuning (core) | Pending |
-| 4 | Lambda sweep + Pareto analysis | Pending |
-| 5 | Cross-domain analysis | Pending |
-| 6 | Loss function ablation | Pending |
-| 7 | Complementarity with runtime adaptation | Pending |
+| # | Experiment | Qwen | Llama |
+|---|-----------|------|-------|
+| 1 | Baseline degradation measurement | Done | Done |
+| 2 | KL–acceptance rate correlation | Done | — |
+| 3 | Speculator-aware fine-tuning (core) | Done | Running |
+| 4 | Lambda sweep + Pareto analysis | Done | Pending |
+| 5 | Cross-domain analysis | Done | — |
+| 6 | Loss function ablation | Done | — |
+| 7 | Complementarity with runtime adaptation | Running | — |
 
 ## Quick Start
 
 ```bash
 # Install dependencies
 pip install -r requirements.txt
-
-# Run smoke test (verifies full pipeline)
-bash scripts/smoke_test.sh
 
 # Run a specific experiment
 python -m src.train --config configs/exp3_spec_aware.yaml \
