@@ -297,6 +297,17 @@ def save_checkpoint(model: Any, output_dir: str, step: int | None = None) -> str
     os.makedirs(save_dir, exist_ok=True)
     model.save_pretrained(save_dir)
 
+    # Fallback: ensure adapter_config.json is saved (some PEFT versions skip it)
+    config_path = os.path.join(save_dir, "adapter_config.json")
+    if not os.path.exists(config_path) and hasattr(model, "peft_config"):
+        import json
+        active_adapter = model.active_adapter
+        if isinstance(active_adapter, list):
+            active_adapter = active_adapter[0]
+        cfg = model.peft_config[active_adapter]
+        with open(config_path, "w") as f:
+            json.dump(cfg.to_dict(), f, indent=2)
+
     logger = logging.getLogger("specaware")
     logger.info("Saved checkpoint to %s", save_dir)
 
