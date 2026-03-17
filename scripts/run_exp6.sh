@@ -64,7 +64,7 @@ echo "Target model: $TARGET_MODEL"
 echo "Draft model:  $DRAFT_MODEL"
 echo ""
 
-EXP_DIR="results/exp6"
+EXP_DIR="${EXP6_RESULTS_DIR:-results/exp6}"
 mkdir -p "$EXP_DIR"
 
 DOMAIN="code"
@@ -129,7 +129,7 @@ for LOSS_TYPE in $LOSS_TYPES; do
     # Fine-tune
     echo "  -> Fine-tuning with loss_type=$LOSS_TYPE..."
     python -m src.train \
-        --config configs/exp6_loss_ablation.yaml \
+        --config "${EXP6_CONFIG:-configs/exp6_loss_ablation.yaml}" \
         --domain "$DOMAIN" \
         --target_device "$DEVICE" \
         --draft_device "$DRAFT_DEVICE" \
