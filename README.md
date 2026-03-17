@@ -45,6 +45,16 @@ Higher λ monotonically increases α but trades off task loss. Results across do
 | Medical | 0.3340 | 0.3559 | 0.4556 | 0.3103 |
 | Chat | 0.2918 | 0.3030 | 0.3377 | 0.2546 |
 
+### EXP-4: Lambda Sweep (Llama)
+
+Llama models show larger degradation from standard FT, making the recovery more dramatic. At λ=1.0, **all three domains exceed the base model's α**:
+
+| Domain | Base α | Std FT α | λ=0.1 α | λ=0.5 α | λ=1.0 α |
+|--------|--------|----------|---------|---------|---------|
+| Code | 0.5954 | 0.5449 | 0.5596 | 0.5881 | **0.6158** (+3.4%) |
+| Medical | 0.4163 | 0.3747 | 0.3952 | 0.3925 | **0.4320** (+3.8%) |
+| Chat | 0.3784 | 0.2517 | 0.2624 | 0.3554 | **0.4063** (+7.4%) |
+
 ### EXP-5: Cross-Domain Generalization (Qwen)
 
 Models trained with spec-aware loss on one domain maintain reasonable α on other domains:
@@ -79,11 +89,11 @@ Jensen-Shannon divergence marginally outperforms forward KL as the regularizatio
 |---|-----------|------|-------|
 | 1 | Baseline degradation measurement | Done | Done |
 | 2 | KL–acceptance rate correlation | Done | — |
-| 3 | Speculator-aware fine-tuning (core) | Done | Running |
-| 4 | Lambda sweep + Pareto analysis | Done | Pending |
+| 3 | Speculator-aware fine-tuning (core) | Done | Done |
+| 4 | Lambda sweep + Pareto analysis | Done | Done |
 | 5 | Cross-domain analysis | Done | — |
 | 6 | Loss function ablation | Done | — |
-| 7 | Complementarity with runtime adaptation | Running | — |
+| 7 | Complementarity with runtime adaptation | Done | — |
 
 ## Quick Start
 

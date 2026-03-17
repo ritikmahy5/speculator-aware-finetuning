@@ -585,4 +585,56 @@ A re-run at higher λ (e.g., 0.5 or 1.0) would amplify these differences and pro
 2. **λ=1.0 surpasses the base model α** — the fine-tuned model achieves 0.6158 vs base 0.5954, a 3.4% improvement. The KL regularization at high λ actually makes the target MORE similar to the draft than the original model.
 3. **KL divergence decreases monotonically** — from 0.6157 (λ=0.01) to 0.2963 (λ=1.0), confirming the regularization works as intended.
 4. **Clear Pareto trade-off** — lower λ preserves task loss, higher λ preserves/improves α. The optimal λ depends on the user's tolerance for task degradation.
-5. **Medical and chat sweeps pending** (jobs 5141293-5141294) — these domains showed larger degradation in EXP-1, so the benefits of spec-aware training should be even more pronounced.
+5. **Medical and chat sweeps now complete** — see results below.
+
+## Llama EXP-4 — Lambda Sweep, Medical Domain
+
+**Job:** 5141293 (gpu partition, H200)
+**Base α (medical):** 0.4163, **Standard FT α (medical):** 0.3747
+
+| λ | α | ± std | KL | vs Base | vs Standard FT |
+|---|---|-------|-----|---------|---------------|
+| 0.01 | 0.3952 | 0.0995 | 0.8707 | -5.1% | +5.5% |
+| 0.05 | 0.3869 | 0.1001 | 0.8390 | -7.1% | +3.3% |
+| 0.10 | 0.3952 | 0.0818 | 0.7941 | -5.1% | +5.5% |
+| 0.20 | 0.3817 | 0.0842 | 0.6693 | -8.3% | +1.9% |
+| 0.50 | 0.3925 | 0.0890 | 0.4880 | -5.7% | +4.7% |
+| 1.00 | **0.4320** | 0.0825 | 0.3895 | **+3.8%** | **+15.3%** |
+
+### Medical Observations
+
+1. **λ=1.0 again exceeds base model** — 0.4320 vs 0.4163 base (+3.8%), similar to code domain.
+2. **Non-monotonic at mid-range λ** — α dips at λ=0.2 (0.3817) before recovering. This is unlike the clean monotonic trend in code domain.
+3. **All λ values beat standard FT** — even λ=0.01 achieves 0.3952 vs standard FT's 0.3747.
+4. **KL decreases monotonically** — from 0.8707 to 0.3895, as expected.
+
+## Llama EXP-4 — Lambda Sweep, Chat Domain
+
+**Job:** 5141294 (gpu partition, H200)
+**Base α (chat):** 0.3784, **Standard FT α (chat):** 0.2517
+
+| λ | α | ± std | KL | vs Base | vs Standard FT |
+|---|---|-------|-----|---------|---------------|
+| 0.01 | 0.2556 | 0.0805 | 1.0841 | -32.5% | +1.5% |
+| 0.05 | 0.2635 | 0.0755 | 1.0478 | -30.4% | +4.7% |
+| 0.10 | 0.2624 | 0.0814 | 0.9422 | -30.7% | +4.3% |
+| 0.20 | 0.2941 | 0.0841 | 0.7203 | -22.3% | +16.8% |
+| 0.50 | 0.3554 | 0.0902 | 0.5316 | -6.1% | +41.2% |
+| 1.00 | **0.4063** | 0.0897 | 0.4206 | **+7.4%** | **+61.4%** |
+
+### Chat Observations
+
+1. **Most dramatic recovery of any domain** — chat was the worst-degraded domain (-33.5% from standard FT), and λ=1.0 not only recovers but exceeds the base by 7.4%.
+2. **λ=0.5 is the practical sweet spot** — recovers to within 6.1% of base while likely preserving more task performance than λ=1.0.
+3. **Low λ values barely help** — at λ=0.01-0.1, chat α is still ~30% below base. The distributional shift from chat fine-tuning is so large that weak regularization can't contain it.
+4. **λ=1.0 achieves +61.4% over standard FT** — the largest improvement across all domain/λ combinations.
+
+## Llama EXP-4 — Cross-Domain Summary
+
+| Domain | Base α | Std FT α | λ=0.1 α | λ=0.5 α | λ=1.0 α |
+|--------|--------|----------|---------|---------|---------|
+| Code | 0.5954 | 0.5449 | 0.5596 | 0.5881 | **0.6158** |
+| Medical | 0.4163 | 0.3747 | 0.3952 | 0.3925 | **0.4320** |
+| Chat | 0.3784 | 0.2517 | 0.2624 | 0.3554 | **0.4063** |
+
+**Key finding:** λ=1.0 exceeds base α in ALL three domains for Llama models. The chat domain benefits most dramatically from speculator-aware training, consistent with it having the largest distributional shift from standard fine-tuning.

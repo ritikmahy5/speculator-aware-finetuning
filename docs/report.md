@@ -109,7 +109,29 @@ We swept λ ∈ {0.01, 0.05, 0.1, 0.2, 0.5, 1.0} for each domain.
 | 0.50 | 0.5881 | 0.3538 | -1.2% |
 | 1.00 | **0.6158** | 0.2963 | **+3.4%** |
 
-At λ=1.0, the fine-tuned model **exceeds the base model's acceptance rate** while retaining domain-specific capabilities, demonstrating that the KL regularization can actively improve draft-target alignment.
+**Llama, Medical Domain:**
+
+| λ | α | KL | vs Base α |
+|---|---|-----|-----------|
+| 0.01 | 0.3952 | 0.8707 | -5.1% |
+| 0.05 | 0.3869 | 0.8390 | -7.1% |
+| 0.10 | 0.3952 | 0.7941 | -5.1% |
+| 0.20 | 0.3817 | 0.6693 | -8.3% |
+| 0.50 | 0.3925 | 0.4880 | -5.7% |
+| 1.00 | **0.4320** | 0.3895 | **+3.8%** |
+
+**Llama, Chat Domain:**
+
+| λ | α | KL | vs Base α |
+|---|---|-----|-----------|
+| 0.01 | 0.2556 | 1.0841 | -32.5% |
+| 0.05 | 0.2635 | 1.0478 | -30.4% |
+| 0.10 | 0.2624 | 0.9422 | -30.7% |
+| 0.20 | 0.2941 | 0.7203 | -22.3% |
+| 0.50 | 0.3554 | 0.5316 | -6.1% |
+| 1.00 | **0.4063** | 0.4206 | **+7.4%** |
+
+At λ=1.0, the fine-tuned model **exceeds the base model's acceptance rate in all three domains** — code (+3.4%), medical (+3.8%), and chat (+7.4%). Chat shows the most dramatic recovery: standard fine-tuning degrades α by 33.5%, but at λ=1.0 the model surpasses the base by 7.4%. The medical domain shows a non-monotonic pattern at mid-range λ values but converges to strong improvement at λ=1.0.
 
 **Qwen results** show the same monotonic trend across all three domains (code, medical, chat), with medical showing the largest absolute gains at high λ.
 
@@ -158,7 +180,7 @@ Both approaches improve with draft adaptation. In the Qwen setting (where standa
 
 1. **Standard LoRA fine-tuning can severely degrade speculative decoding**, with up to 33.5% relative drop in acceptance rate for Llama models on chat data. The effect is model-family dependent — Qwen showed resilience.
 
-2. **Speculator-aware fine-tuning effectively preserves acceptance rates.** At λ=0.1, chat degradation drops from 33.5% to 7.6%. At λ=1.0, the model can exceed the base acceptance rate.
+2. **Speculator-aware fine-tuning effectively preserves acceptance rates.** At λ=0.1, chat degradation drops from 33.5% to 7.6%. At λ=1.0, the fine-tuned model exceeds the base acceptance rate across all three domains: code (+3.4%), medical (+3.8%), and chat (+7.4%).
 
 3. **The trade-off is smooth and controllable.** λ provides a single knob to balance task performance against speculative decoding efficiency, enabling practitioners to choose their operating point on the Pareto frontier.
 
