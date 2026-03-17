@@ -184,63 +184,75 @@ def run_lm_eval(
 # Domain-specific held-out data loading
 # ---------------------------------------------------------------------------
 
-def load_held_out_data(domain: str, num_samples: int = 200) -> list[str]:
+def load_held_out_data(domain: str, num_samples: int = 200, prompts_file: str = "configs/eval_prompts.yaml") -> list[str]:
     """Load held-out data for perplexity evaluation.
 
-    Uses a different split/offset than training data to avoid contamination.
+    First tries to load from the eval prompts file (always available).
+    Falls back to streaming datasets if more samples are needed.
 
     Args:
         domain: One of "code", "medical", "chat".
         num_samples: Number of samples to load.
+        prompts_file: Path to eval prompts YAML.
 
     Returns:
         List of text strings.
     """
-    from datasets import load_dataset
-
     texts = []
 
-    if domain == "code":
-        ds = load_dataset("bigcode/starcoderdata", "python", split="train", streaming=True)
-        # Skip first 15000 to avoid overlap with training data (10K used for training)
-        for i, sample in enumerate(ds):
-            if i < 15000:
-                continue
-            if i >= 15000 + num_samples:
-                break
-            content = sample.get("content", "")
-            if len(content) >= 50:
-                texts.append(content)
+    # Primary: use eval prompts (guaranteed available, no gating issues)
+    if os.path.exists(prompts_file):
+        with open(prompts_file, "r") as f:
+            prompts_data = yaml.safe_load(f)
+        key = domain if domain in prompts_data else f"{domain}_prompts"
+        if key in prompts_data:
+            texts = prompts_data[key]
+            # Also add mixed prompts for more data
+            mixed_key = "mixed" if "mixed" in prompts_data else "mixed_prompts"
+            if mixed_key in prompts_data:
+                texts = texts + prompts_data[mixed_key]
+            logger.info("Loaded %d prompts from %s for domain '%s'", len(texts), prompts_file, domain)
 
-    elif domain == "medical":
-        ds = load_dataset("medalpaca/medical_meadow_medqa", split="train", streaming=True)
-        for i, sample in enumerate(ds):
-            if i < 15000:
-                continue
-            if i >= 15000 + num_samples:
-                break
-            inp = sample.get("input", "")
-            out = sample.get("output", "")
-            text = f"Question: {inp}\nAnswer: {out}"
-            if len(text) >= 50:
-                texts.append(text)
+    # Fallback: try streaming datasets for more samples
+    if len(texts) < num_samples:
+        try:
+            from datasets import load_dataset as _load_ds
+            logger.info("Loading additional samples from streaming dataset...")
 
-    elif domain == "chat":
-        ds = load_dataset("HuggingFaceH4/ultrachat_200k", split="train_sft", streaming=True)
-        for i, sample in enumerate(ds):
-            if i < 15000:
-                continue
-            if i >= 15000 + num_samples:
-                break
-            messages = sample.get("messages", [])
-            text = "\n".join(m.get("content", "") for m in messages)
-            if len(text) >= 50:
-                texts.append(text)
+            if domain == "code":
+                ds = _load_ds("codeparrot/github-code-clean", split="train", streaming=True, trust_remote_code=True)
+                for i, sample in enumerate(ds):
+                    if len(texts) >= num_samples:
+                        break
+                    content = sample.get("code", sample.get("content", ""))
+                    if len(content) >= 50:
+                        texts.append(content)
+            elif domain == "medical":
+                ds = _load_ds("medalpaca/medical_meadow_medqa", split="train", streaming=True)
+                for i, sample in enumerate(ds):
+                    if i < 15000 or len(texts) >= num_samples:
+                        if len(texts) >= num_samples:
+                            break
+                        continue
+                    text = f"Question: {sample.get('input', '')}\nAnswer: {sample.get('output', '')}"
+                    if len(text) >= 50:
+                        texts.append(text)
+            elif domain == "chat":
+                ds = _load_ds("HuggingFaceH4/ultrachat_200k", split="train_sft", streaming=True)
+                for i, sample in enumerate(ds):
+                    if i < 15000 or len(texts) >= num_samples:
+                        if len(texts) >= num_samples:
+                            break
+                        continue
+                    messages = sample.get("messages", [])
+                    text = "\n".join(m.get("content", "") for m in messages)
+                    if len(text) >= 50:
+                        texts.append(text)
+        except Exception as e:
+            logger.warning("Could not load streaming dataset: %s. Using eval prompts only.", e)
 
-    else:
-        raise ValueError(f"Unknown domain: {domain}")
-
-    logger.info("Loaded %d held-out samples for domain '%s'", len(texts), domain)
+    texts = texts[:num_samples]
+    logger.info("Final: %d samples for domain '%s'", len(texts), domain)
     return texts
 
 

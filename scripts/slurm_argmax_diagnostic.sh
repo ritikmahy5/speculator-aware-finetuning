@@ -54,7 +54,7 @@ for DOMAIN in code medical chat; do
         --draft_device "$DEVICE"
 
     # Standard FT (from EXP-1)
-    ADAPTER_STD="results/exp1_llama/${DOMAIN}_baseline/final"
+    ADAPTER_STD="results/exp1_llama/baseline_${DOMAIN}/final"
     if [ -d "$ADAPTER_STD" ]; then
         echo "  [2/3] Standard FT..."
         python -m src.measure_argmax \
@@ -113,7 +113,7 @@ for DOMAIN in code medical chat; do
         --draft_device "$DEVICE"
 
     # Standard FT (from EXP-1)
-    ADAPTER_STD="results/exp1/${DOMAIN}_baseline/final"
+    ADAPTER_STD="results/exp1/baseline_${DOMAIN}/final"
     if [ -d "$ADAPTER_STD" ]; then
         echo "  [2/3] Standard FT..."
         python -m src.measure_argmax \

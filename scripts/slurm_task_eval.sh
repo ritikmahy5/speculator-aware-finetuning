@@ -60,7 +60,7 @@ for DOMAIN in code medical chat; do
     fi
 
     # Standard FT (λ=0, from EXP-1)
-    ADAPTER="results/exp1_llama/${DOMAIN}_baseline/final"
+    ADAPTER="results/exp1_llama/baseline_${DOMAIN}/final"
     OUT="results/task_eval/llama_std_ft_${DOMAIN}.json"
     if [ -d "$ADAPTER" ] && [ ! -f "$OUT" ]; then
         echo "  -> Standard FT perplexity..."
