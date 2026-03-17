@@ -48,7 +48,7 @@ echo "Target model: $TARGET_MODEL"
 echo "Draft model:  $DRAFT_MODEL"
 echo ""
 
-EXP_DIR="results/exp3_spec_aware_code_lam0.1"
+EXP_DIR="${EXP3_RESULTS_DIR:-results/exp3_spec_aware_code_lam0.1}"
 mkdir -p "$EXP_DIR"
 
 # ====================================================================
@@ -56,7 +56,7 @@ mkdir -p "$EXP_DIR"
 # ====================================================================
 echo ">>> Step 1/3: Fine-tuning code domain with lam=0.1, loss_type=kl"
 python -m src.train \
-    --config configs/exp3_spec_aware.yaml \
+    --config "${EXP3_CONFIG:-configs/exp3_spec_aware.yaml}" \
     --domain code \
     --target_device "$DEVICE" \
     --draft_device "$DRAFT_DEVICE" \
@@ -106,7 +106,7 @@ for DOMAIN in code medical chat mixed; do
 done
 
 # Also measure base model alpha if not already done by EXP-1
-BASE_ACC="results/exp1/acceptance_base_code.json"
+BASE_ACC="${EXP1_RESULTS_DIR:-results/exp1}/acceptance_base_code.json"
 if [ ! -f "$BASE_ACC" ]; then
     echo "  -> Measuring base model acceptance (EXP-1 results not found)"
     mkdir -p results/exp1
