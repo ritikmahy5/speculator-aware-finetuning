@@ -15,18 +15,14 @@ conda activate /scratch/$USER/envs/specaware
 export HF_HOME=/scratch/$USER/.cache/huggingface
 cd /scratch/$USER/speculator-aware-finetuning
 
-# Swap to Llama models config
-cp configs/models.yaml configs/models_qwen_backup.yaml
+# Use Llama models config directly (no swap — avoids race conditions with concurrent jobs)
 cp configs/models_llama.yaml configs/models.yaml
 
 # Override for Llama
 export EXP4_RESULTS_DIR="results/exp4_llama"
 export EXP4_CONFIG="configs/exp4_lambda_sweep_llama.yaml"
 
-# Domain passed as first argument, e.g.: sbatch scripts/slurm_exp4_llama_domain.sh code
-DOMAIN=${1:-code}
+# Domain passed via --export=DOMAIN=xxx from sbatch, default to code
+DOMAIN=${DOMAIN:-code}
+echo "Running Llama EXP-4 for domain: $DOMAIN"
 bash scripts/run_exp4.sh --domain "$DOMAIN"
-
-# Restore Qwen config
-cp configs/models_qwen_backup.yaml configs/models.yaml
-rm configs/models_qwen_backup.yaml
