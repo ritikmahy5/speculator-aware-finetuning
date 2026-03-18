@@ -1,0 +1,51 @@
+# Third Model Family: Gemma 2 baseline degradation
+# Tests generalizability with a third architecture family
+experiment_id: "EXP-1-Gemma"
+hypothesis: "H1c — Gemma 2 9B/2B pair behavior (degradation or resilience?) completes the three-family picture"
+
+models:
+  target: "google/gemma-2-9b-it"
+  draft: "google/gemma-2-2b-it"
+
+domains:
+  - "code"
+  - "medical"
+  - "chat"
+
+training:
+  num_epochs: 1
+  batch_size: 4
+  gradient_accumulation_steps: 4
+  learning_rate: 2.0e-4
+  weight_decay: 0.01
+  warmup_ratio: 0.05
+  max_seq_len: 1024
+  max_samples: 10000
+  scheduler: "cosine"
+  max_grad_norm: 1.0
+  bf16: true
+  seed: 42
+
+lora:
+  rank: 16
+  alpha: 32
+  dropout: 0.05
+  target_modules:
+    - q_proj
+    - k_proj
+    - v_proj
+    - o_proj
+    - gate_proj
+    - up_proj
+    - down_proj
+
+spec_loss:
+  lam: 0.0
+  loss_type: "kl"
+
+measurement:
+  num_prompts_per_domain: 50
+  max_new_tokens: 128
+  draft_k: 5
+
+output_dir: "results/exp1_gemma"

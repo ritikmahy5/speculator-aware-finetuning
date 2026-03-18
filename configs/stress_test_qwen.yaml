@@ -1,0 +1,54 @@
+# Stress Test: Higher-rank, multi-epoch Qwen fine-tuning
+# Tests whether Qwen can be pushed to show α degradation with more aggressive training
+experiment_id: "STRESS-TEST"
+hypothesis: "Higher rank (64) and longer training (3 epochs) will push Qwen to show degradation"
+
+models:
+  target: "Qwen/Qwen2.5-7B-Instruct"
+  draft: "Qwen/Qwen2.5-0.5B-Instruct"
+
+domain: "code"
+
+training:
+  num_epochs: 3
+  batch_size: 4
+  gradient_accumulation_steps: 4
+  learning_rate: 2.0e-4
+  weight_decay: 0.01
+  warmup_ratio: 0.05
+  max_seq_len: 1024
+  max_samples: 10000
+  scheduler: "cosine"
+  max_grad_norm: 1.0
+  bf16: true
+  seed: 42
+
+lora:
+  rank: 64
+  alpha: 128
+  dropout: 0.05
+  target_modules:
+    - q_proj
+    - k_proj
+    - v_proj
+    - o_proj
+    - gate_proj
+    - up_proj
+    - down_proj
+
+spec_loss:
+  lam: 0.0
+  loss_type: "kl"
+
+logging:
+  log_every: 10
+  save_checkpoints_every: 468
+  measure_acceptance_every: 468
+  wandb: false
+
+measurement:
+  num_prompts_per_domain: 50
+  max_new_tokens: 128
+  draft_k: 5
+
+output_dir: "results/stress_test_qwen"
