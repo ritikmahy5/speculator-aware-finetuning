@@ -135,7 +135,7 @@ echo "============================================"
 python -c "
 import json, os
 exp_dir = '$EXP_DIR'
-print(f'{'Domain':10s} {'Base α':>10s} {'FT α':>10s} {'Δ':>10s} {'Relative':>10s}')
+print(f"{'Domain':10s} {'Base a':>10s} {'FT a':>10s} {'Delta':>10s} {'Relative':>10s}")
 print('-' * 55)
 for domain in ['code', 'medical', 'chat']:
     base_f = os.path.join(exp_dir, f'acceptance_base_{domain}.json')
