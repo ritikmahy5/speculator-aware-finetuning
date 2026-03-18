@@ -654,8 +654,8 @@ A re-run at higher λ (e.g., 0.5 or 1.0) would amplify these differences and pro
 |-----------|--------|---------|---------|-----------|
 | KL divergence | **0.5881** | **1st** | -1.2% | +7.9% |
 | Reverse KL | 0.5776 | 2nd | -3.0% | +6.0% |
-| TV distance | 0.5583 | 4th | -6.2% | +2.5% |
-| Token match | 0.5509 | 3rd | -7.5% | +1.1% |
+| TV distance | 0.5583 | 3rd | -6.2% | +2.5% |
+| Token match | 0.5509 | 4th | -7.5% | +1.1% |
 | JS divergence | 0.5505 | **5th** | -7.5% | +1.0% |
 
 ### Llama EXP-6 Observations

@@ -4,6 +4,13 @@
 
 When a target model is fine-tuned on domain-specific data, its output distribution shifts away from the draft model used for speculative decoding — degrading inference speed. This project investigates whether adding a KL-divergence regularization loss during LoRA fine-tuning can preserve speculative decoding acceptance rates.
 
+## TL;DR
+
+- Standard LoRA fine-tuning degrades Llama speculative decoding acceptance rate by up to **33.5%** (chat domain).
+- KL regularization at **lambda=0.5** recovers nearly all lost acceptance rate; at **lambda=1.0**, fine-tuned models **exceed** base acceptance rate in all domains.
+- The KL-alpha relationship is model-family dependent: Llama shows strong negative correlation (r=-0.93), while Qwen shows positive correlation (r=+0.96) due to constructive distribution sharpening.
+- Qwen is inherently resilient to speculative decoding drift (max -8.4% even under stress), making Llama the primary validation target for this method.
+
 ## The Approach
 
 ```
@@ -158,14 +165,17 @@ Both approaches improve with draft adaptation. For Llama (where standard FT degr
 
 | Plot | Description |
 |------|-------------|
-| ![](plots/plot1_degradation.png) | EXP-1: Acceptance rate before/after fine-tuning |
-| ![](plots/plot2_kl_correlation.png) | EXP-2: KL divergence vs acceptance rate correlation |
-| ![](plots/plot3_spec_aware_comparison.png) | EXP-3: Base vs standard-FT vs spec-aware-FT |
-| ![](plots/plot4_pareto_overlay.png) | EXP-4: Pareto frontier — Qwen, all domains |
-| ![](plots/plot4_pareto_overlay_llama.png) | EXP-4: Pareto frontier — Llama, all domains |
-| ![](plots/plot5_cross_domain.png) | EXP-5: Cross-domain generalization heatmap |
-| ![](plots/plot6_loss_ablation.png) | EXP-6: Loss function comparison |
-| ![](plots/plot7_complementarity.png) | EXP-7: Complementarity with runtime adaptation |
+| ![EXP-1 degradation](plots/plot1_degradation.png) | EXP-1: Acceptance rate before/after fine-tuning |
+| ![EXP-2 KL correlation](plots/plot2_kl_correlation.png) | EXP-2: KL divergence vs acceptance rate correlation |
+| ![EXP-3 spec-aware comparison](plots/plot3_spec_aware_comparison.png) | EXP-3: Base vs standard-FT vs spec-aware-FT |
+| ![EXP-4 Pareto Qwen](plots/plot4_pareto_overlay.png) | EXP-4: Pareto frontier — Qwen, all domains |
+| ![EXP-4 Pareto Llama](plots/plot4_pareto_overlay_llama.png) | EXP-4: Pareto frontier — Llama, all domains |
+| ![EXP-5 cross-domain](plots/plot5_cross_domain.png) | EXP-5: Cross-domain generalization heatmap |
+| ![EXP-6 loss ablation](plots/plot6_loss_ablation.png) | EXP-6: Loss function comparison |
+| ![EXP-7 complementarity](plots/plot7_complementarity.png) | EXP-7: Complementarity with runtime adaptation |
+| ![EXP-2 Llama KL scatter](plots/plot_exp2_llama_kl_correlation.png) | EXP-2 (Llama): KL vs acceptance rate scatter |
+| ![EXP-2 correlation comparison](plots/plot_exp2_correlation_comparison.png) | EXP-2: KL-alpha correlation — Qwen vs Llama side-by-side |
+| ![Qwen stress test trajectory](plots/plot_stress_test_trajectory.png) | Qwen stress test: alpha trajectory over 3 epochs |
 
 ## Experiments
 

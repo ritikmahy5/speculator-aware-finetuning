@@ -2,7 +2,7 @@
 
 ## Abstract
 
-Speculative decoding accelerates LLM inference by using a small draft model to propose tokens that a larger target model verifies in parallel. However, when the target model is fine-tuned on domain-specific data, its output distribution shifts away from the draft model, degrading acceptance rates and inference speed. We propose **speculator-aware fine-tuning**, which adds a KL-divergence regularization term to the training loss that constrains the fine-tuned model to remain close to the draft model's distribution. Using LoRA fine-tuning on Llama-3.1-8B-Instruct (target) with Llama-3.2-1B-Instruct (draft), we demonstrate that standard fine-tuning degrades speculative decoding acceptance rate (α) by up to 33.5% on chat data, while our method at λ=0.1 limits this to 7.6%. At higher regularization strengths (λ=1.0), the fine-tuned model can actually exceed the base model's acceptance rate. We evaluate five divergence measures as regularization losses, finding Jensen-Shannon divergence marginally outperforms forward KL. Cross-domain analysis shows the approach generalizes across evaluation domains, and complementarity experiments demonstrate it provides a better starting point for runtime draft adaptation systems.
+Speculative decoding accelerates LLM inference by using a small draft model to propose tokens that a larger target model verifies in parallel. However, when the target model is fine-tuned on domain-specific data, its output distribution shifts away from the draft model, degrading acceptance rates and inference speed. We propose **speculator-aware fine-tuning**, which adds a KL-divergence regularization term to the training loss that constrains the fine-tuned model to remain close to the draft model's distribution. Across two model families, we find that vulnerability to fine-tuning-induced degradation is highly model-pair dependent: Llama-3.1-8B/1B suffers up to 33.5% relative acceptance rate (α) loss on chat data, while Qwen2.5-7B/0.5B remains resilient even under aggressive training (4x LoRA rank, 3x epochs, max degradation -8.4%). For the vulnerable Llama pair, KL divergence strongly predicts α (Pearson r=-0.928, p=0.008), validating its use as a regularization target. Our method at λ=0.1 reduces Llama's chat degradation from 33.5% to 7.6%, and at λ=1.0, the fine-tuned model exceeds the base model's acceptance rate across all three domains. We evaluate five divergence measures as regularization losses, finding that the optimal choice depends on the regularization regime: Jensen-Shannon divergence at low λ, forward KL at high λ. Argmax agreement analysis directly validates the token-level alignment mechanism, and task-performance tradeoff is mild — at λ=0.5, perplexity actually improves over the base model on code and medical domains. Cross-domain analysis shows the approach generalizes across evaluation domains, and complementarity experiments demonstrate it provides a better starting point for runtime draft adaptation systems.
 
 ## 1. Introduction
 
@@ -18,12 +18,16 @@ L_total = L_task + λ × KL(p_target || p_draft)
 
 The draft model is frozen and loaded alongside the target during training. This approach requires no modifications to model architecture, inference code, or the draft model itself.
 
+Crucially, the severity of fine-tuning-induced degradation — and therefore the value of this intervention — depends on the target-draft model pair. We find that Llama-3.1-8B/1B is highly vulnerable (up to 33.5% α loss), while Qwen2.5-7B/0.5B is naturally resilient. The KL-α correlation flips sign between families (r=-0.928 for Llama, r=+0.956 for Qwen), revealing that the mechanism underlying degradation differs fundamentally. This two-family story motivates a practical recommendation: assess your model pair's vulnerability before investing in speculator-aware training.
+
 ### Contributions
 
 1. We quantify the degradation of speculative decoding acceptance rates from standard LoRA fine-tuning across three domains (code, medical, chat), finding up to 33.5% relative degradation with Llama models.
 2. We propose speculator-aware fine-tuning with KL regularization and demonstrate it reduces acceptance rate degradation from 33.5% to 7.6% at λ=0.1, with higher λ values fully recovering or exceeding base performance.
 3. We evaluate five divergence measures as regularization losses, finding JS divergence marginally outperforms forward KL.
 4. We analyze cross-domain generalization and complementarity with runtime draft adaptation (e.g., ATLAS-style systems).
+5. We show the KL-α relationship is model-family dependent (Llama r=-0.928 vs Qwen r=+0.956), explaining when speculator-aware training is most valuable.
+6. We validate the alignment mechanism via argmax agreement analysis and show the task-performance tradeoff is mild, with KL regularization acting as a beneficial regularizer against overfitting.
 
 ## 2. Method
 
@@ -80,7 +84,7 @@ We first establish that standard fine-tuning degrades speculative decoding accep
 
 ### 3.2 KL–Acceptance Rate Correlation (EXP-2)
 
-We validated that KL divergence between target and draft predicts acceptance rate by measuring both at intermediate checkpoints during code fine-tuning.
+Having established that fine-tuning degrades α for Llama but not Qwen, we next ask: does KL divergence between target and draft reliably predict acceptance rate? If so, minimizing KL during training is a principled way to preserve α. We measured both metrics at intermediate checkpoints during code fine-tuning for both families.
 
 **Qwen (code domain, checkpoints at 25/50/75/100%):** The Pearson correlation between KL and α was **positive** (r=+0.956, p=0.003). Both KL and α increased during training — distribution sharpening toward code tokens happened to improve draft-target alignment. This is a model-pair-specific confound, not a general principle.
 
@@ -101,7 +105,7 @@ The Pearson correlation was **strongly negative** (r=-0.928, p=0.008) — the op
 
 ### 3.3 Speculator-Aware Fine-Tuning (EXP-3)
 
-Testing our core hypothesis with Llama models at λ=0.1:
+With the KL-α relationship validated for Llama (and the understanding that Qwen's constructive sharpening makes it a less compelling target), we now test the core hypothesis: can KL regularization during training preserve α? We focus on the Llama pair at λ=0.1:
 
 | Domain | Base α | Standard FT α | Spec-Aware α (λ=0.1) |
 |--------|--------|--------------|----------------------|
@@ -113,7 +117,7 @@ The chat domain shows the most dramatic improvement: degradation reduced from 33
 
 ### 3.4 Lambda Sweep and Pareto Analysis (EXP-4)
 
-We swept λ ∈ {0.01, 0.05, 0.1, 0.2, 0.5, 1.0} for each domain.
+The λ=0.1 result is encouraging but leaves room for improvement, particularly on chat. How does α respond across the full range of regularization strengths? We swept λ from 0.01 to 1.0 for each domain.
 
 **Llama, Code Domain:**
 
@@ -166,6 +170,8 @@ In-domain performance is consistently highest. Cross-domain degradation is modes
 
 ### 3.6 Loss Function Ablation (EXP-6)
 
+We have thus far used forward KL as the regularization loss, but is it the best choice? We compared all five divergence measures at two operating points to understand how the loss function interacts with λ.
+
 Comparing divergence measures at λ=0.01 on code domain (Qwen):
 
 | Loss Type | α | Ranking |
@@ -192,7 +198,7 @@ The ranking inverts at higher λ: KL (1st at λ=0.5) was 4th at λ=0.01, while J
 
 ### 3.7 Complementarity with Runtime Adaptation (EXP-7)
 
-We tested whether spec-aware fine-tuning complements runtime draft adaptation (simulating ATLAS-style systems). After generating outputs from fine-tuned models, we adapted the draft model on these outputs and measured α at different adaptation steps:
+Speculator-aware fine-tuning operates at training time, but systems like ATLAS adapt the draft model at inference time. Are these approaches complementary, or substitutes? We tested this by generating outputs from fine-tuned models, adapting the draft model on those outputs, and measuring α at different adaptation steps:
 
 | Adaptation Steps | Standard FT α | Spec-Aware FT α |
 |-----------------|--------------|----------------|
@@ -204,6 +210,8 @@ We tested whether spec-aware fine-tuning complements runtime draft adaptation (s
 Both approaches improve with draft adaptation. In the Qwen setting (where standard FT doesn't degrade α), standard FT maintains a slight edge. The more relevant comparison would be with Llama, where spec-aware FT prevents the large initial degradation that runtime adaptation must then recover from.
 
 ## 4. Discussion
+
+Our experiments reveal a nuanced picture: fine-tuning-induced degradation of speculative decoding is a real and significant problem, but its severity and the appropriate remedy depend on the model pair. We synthesize the key findings below.
 
 ### Key Findings
 
@@ -268,10 +276,13 @@ To test whether Qwen's robustness holds under more aggressive fine-tuning, we ra
 2. **Model-family dependence** — Qwen models showed minimal degradation from standard FT, limiting the benefit of our approach. The method is most valuable for model pairs where fine-tuning causes significant distributional shift. A stress test with 4x LoRA rank and 3x epochs confirmed Qwen's resilience (max -8.4% vs Llama's -33.5% under standard settings).
 3. **Single-epoch training** — we used 1 epoch across all experiments for consistency. The Qwen stress test at 3 epochs showed that longer training does produce gradual degradation, but the effect remains modest for resilient model pairs.
 4. **Draft model must be available during training** — requires loading both models, approximately doubling GPU memory. This is mitigated by keeping the draft in inference mode with no gradient computation.
+5. **Limited model-family coverage** — we evaluated two model families (Llama and Qwen), finding strikingly different behavior. Experiments with a third family (Gemma) are ongoing and will help determine whether the Llama-like vulnerability or the Qwen-like resilience is the more common pattern across the ecosystem.
 
 ## 5. Conclusion
 
-We demonstrate that speculator-aware fine-tuning — a simple KL regularization during LoRA training — effectively preserves speculative decoding acceptance rates across domain-specific fine-tuning. The approach is easy to implement, requires no architectural changes, and provides a controllable trade-off between task adaptation and inference efficiency. For deployment scenarios using speculative decoding, we recommend incorporating speculator-aware loss as a standard component of the fine-tuning pipeline.
+We demonstrate that speculator-aware fine-tuning — a simple KL regularization during LoRA training — effectively preserves speculative decoding acceptance rates across domain-specific fine-tuning. The severity of fine-tuning-induced degradation is model-family dependent: Llama suffers up to 33.5% relative α loss from standard training, while Qwen remains resilient even under aggressive settings. For vulnerable pairs like Llama, our method reduces degradation from 33.5% to 7.6% at λ=0.1, and at λ=1.0 the fine-tuned model surpasses the base model's acceptance rate in all three domains. The approach is easy to implement, requires no architectural changes, and provides a controllable trade-off between task adaptation and inference efficiency. The finding that KL regularization simultaneously improves perplexity (by acting as a regularizer) and preserves α suggests there is often no real cost to incorporating this loss.
+
+**Practical Recommendations.** Based on our experiments across two model families, three domains, five loss functions, and seven λ values, we offer the following guidelines for practitioners deploying speculative decoding with fine-tuned models: (a) **Assess vulnerability first** — measure base α and base KL for your target-draft pair before investing in speculator-aware training. Model pairs with high base α and low base KL (like Llama) are vulnerable to fine-tuning drift; pairs where the draft is already loosely aligned (like Qwen) may not need intervention. (b) **Use λ=0.5 as a default starting point** — it offers strong α recovery (within 1-6% of base across domains) with mild task-performance tradeoff, and at this strength the KL regularization also acts as a beneficial regularizer against overfitting. (c) **Choose the loss function based on your λ regime** — use JS divergence at low λ (below 0.1) for its bounded, stable gradients, and forward KL at higher λ (0.5 and above) where stronger distributional alignment is needed.
 
 ## Appendix: Experimental Configuration
 
