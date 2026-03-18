@@ -17,6 +17,7 @@ module load cuda/12.1.1
 source /shared/EL9/explorer/miniconda3/25.9.1/miniconda3/etc/profile.d/conda.sh
 conda activate /scratch/$USER/envs/specaware
 export HF_HOME=/scratch/$USER/.cache/huggingface
+export HF_ALLOW_CODE_EVAL=1
 cd /scratch/$USER/speculator-aware-finetuning
 
 DEVICE="cuda:0"
