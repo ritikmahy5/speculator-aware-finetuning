@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import re
 
 try:
     import yaml
@@ -783,6 +784,352 @@ def plot_complementarity(results_dir: Path, output_dir: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Plot 8 — Argmax Agreement Diagnostic
+# ---------------------------------------------------------------------------
+
+def plot_argmax_diagnostic(results_dir: Path, output_dir: Path) -> None:
+    """Generate grouped bar chart of argmax agreement across conditions.
+
+    Expects ``results/argmax_diagnostic/`` with files like
+    ``llama_base_code.json``, ``llama_std_ft_code.json``,
+    ``llama_specaware_code.json`` (and similarly for qwen).
+
+    Args:
+        results_dir: Root results directory.
+        output_dir: Directory to write plot files.
+    """
+    diag_dir = results_dir / "argmax_diagnostic"
+    if not diag_dir.exists():
+        logger.warning("Skipping plot_argmax_diagnostic: directory not found.")
+        return
+
+    rows = []
+    for json_file in sorted(diag_dir.glob("*.json")):
+        data = _load_json(json_file)
+        if data is None:
+            continue
+        name = json_file.stem  # e.g. llama_base_code
+        parts = name.split("_")
+        # Parse family, condition, domain from filename
+        family = parts[0]  # llama or qwen
+        # Find domain (last part)
+        domain = parts[-1] if parts[-1] in DOMAINS else "unknown"
+        # Condition is everything between family and domain
+        condition_parts = parts[1:-1] if domain != "unknown" else parts[1:]
+        condition = "_".join(condition_parts)
+
+        rows.append({
+            "family": family.capitalize(),
+            "condition": condition,
+            "domain": domain,
+            "argmax_agreement": data.get("argmax_agreement", 0),
+            "top5_overlap": data.get("top5_overlap", 0),
+        })
+
+    if not rows:
+        logger.warning("Skipping plot_argmax_diagnostic: no data found.")
+        return
+
+    df = pd.DataFrame(rows)
+
+    # Plot per family
+    for family in df["family"].unique():
+        fdf = df[df["family"] == family]
+
+        condition_labels = {"base": "Base", "std_ft": "Standard FT", "specaware": "Spec-Aware FT"}
+        conditions = [c for c in ["base", "std_ft", "specaware"] if c in fdf["condition"].values]
+
+        fig, ax = plt.subplots(figsize=(10, 5))
+        x = np.arange(len(DOMAINS))
+        width = 0.25
+        condition_colors = [COLORS["base"], COLORS["code"], COLORS["spec_aware"]]
+
+        for i, cond in enumerate(conditions):
+            cdf = fdf[fdf["condition"] == cond]
+            vals = [cdf[cdf["domain"] == d]["argmax_agreement"].values[0]
+                    if len(cdf[cdf["domain"] == d]) > 0 else 0
+                    for d in DOMAINS]
+            ax.bar(x + i * width, vals, width, label=condition_labels.get(cond, cond),
+                   color=condition_colors[i], edgecolor="white", linewidth=0.8)
+
+        ax.set_xlabel("Domain")
+        ax.set_ylabel("Argmax Agreement Rate")
+        ax.set_title(f"Argmax Agreement: argmax(target) == argmax(draft) — {family}")
+        ax.set_xticks(x + width)
+        ax.set_xticklabels([d.capitalize() for d in DOMAINS])
+        ax.set_ylim(0, 1.0)
+        ax.legend()
+        _add_bar_labels(ax)
+
+        _save_plot(fig, output_dir, f"plot_argmax_diagnostic_{family.lower()}")
+
+    # Combined top-5 overlap plot
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+    for idx, metric in enumerate(["argmax_agreement", "top5_overlap"]):
+        ax = axes[idx]
+        metric_label = "Argmax Agreement" if metric == "argmax_agreement" else "Top-5 Overlap"
+        for family in df["family"].unique():
+            fdf = df[df["family"] == family]
+            conditions = [c for c in ["base", "std_ft", "specaware"] if c in fdf["condition"].values]
+            for cond in conditions:
+                cdf = fdf[fdf["condition"] == cond]
+                vals = [cdf[cdf["domain"] == d][metric].values[0]
+                        if len(cdf[cdf["domain"] == d]) > 0 else 0
+                        for d in DOMAINS]
+                label = f"{family} {condition_labels.get(cond, cond)}"
+                ax.plot(DOMAINS, vals, marker="o", label=label, linewidth=2, markersize=6)
+        ax.set_xlabel("Domain")
+        ax.set_ylabel(metric_label)
+        ax.set_title(metric_label)
+        ax.legend(fontsize=9)
+        ax.set_ylim(0, 1.0)
+
+    _save_plot(fig, output_dir, "plot_argmax_diagnostic_combined")
+
+
+# ---------------------------------------------------------------------------
+# Plot 9 — Task Eval: Perplexity vs Lambda
+# ---------------------------------------------------------------------------
+
+def plot_task_eval(results_dir: Path, output_dir: Path) -> None:
+    """Generate perplexity vs lambda curves for task performance evaluation.
+
+    Expects ``results/task_eval/`` with files like
+    ``llama_base_code.json``, ``llama_specaware_lam0.5_code.json``, etc.
+
+    Args:
+        results_dir: Root results directory.
+        output_dir: Directory to write plot files.
+    """
+    task_dir = results_dir / "task_eval"
+    if not task_dir.exists():
+        logger.warning("Skipping plot_task_eval: directory not found.")
+        return
+
+    rows = []
+    for json_file in sorted(task_dir.glob("*.json")):
+        data = _load_json(json_file)
+        if data is None:
+            continue
+        name = json_file.stem
+        ppl_data = data.get("perplexity", {})
+        ppl = ppl_data.get("perplexity") if isinstance(ppl_data, dict) else ppl_data
+        if ppl is None:
+            continue
+
+        # Parse: llama_base_code, llama_std_ft_code, llama_specaware_lam0.5_code
+        domain = data.get("domain", name.split("_")[-1])
+
+        if "base" in name:
+            lam_val = -0.1  # sentinel for base (no FT)
+            condition = "base"
+        elif "std_ft" in name:
+            lam_val = 0.0  # standard FT = lambda 0
+            condition = "std_ft"
+        else:
+            # Extract lambda from name like "lam0.5"
+            match = re.search(r"lam([\d.]+)", name)
+            lam_val = float(match.group(1)) if match else None
+            condition = f"specaware_{lam_val}"
+
+        if lam_val is None:
+            continue
+
+        rows.append({
+            "domain": domain,
+            "lambda": lam_val,
+            "condition": condition,
+            "perplexity": ppl,
+            "num_samples": ppl_data.get("num_samples") if isinstance(ppl_data, dict) else None,
+        })
+
+    if not rows:
+        logger.warning("Skipping plot_task_eval: no data found.")
+        return
+
+    df = pd.DataFrame(rows)
+
+    # Plot per domain: perplexity vs lambda
+    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+    for idx, domain in enumerate(DOMAINS):
+        ax = axes[idx]
+        ddf = df[df["domain"] == domain].sort_values("lambda")
+
+        if len(ddf) == 0:
+            ax.set_title(f"{domain.capitalize()} — No Data")
+            continue
+
+        # Separate base/std_ft (horizontal lines) from lambda curve
+        base_row = ddf[ddf["lambda"] == -0.1]
+        std_ft_row = ddf[ddf["lambda"] == 0.0]
+        sweep = ddf[ddf["lambda"] > 0]
+
+        if len(base_row) > 0:
+            ax.axhline(y=base_row.iloc[0]["perplexity"], color=COLORS["base"],
+                       linestyle="--", linewidth=1.5, label="Base (no FT)")
+        if len(std_ft_row) > 0:
+            ax.axhline(y=std_ft_row.iloc[0]["perplexity"], color=COLORS["code"],
+                       linestyle=":", linewidth=1.5, label="Standard FT")
+        if len(sweep) > 0:
+            ax.plot(sweep["lambda"], sweep["perplexity"], marker="o",
+                    color=COLORS["spec_aware"], linewidth=2, markersize=6,
+                    label="Spec-Aware FT")
+
+        ax.set_xlabel("λ")
+        ax.set_ylabel("Perplexity")
+        ax.set_title(f"{domain.capitalize()} Domain")
+        ax.legend(fontsize=9)
+
+    fig.suptitle("Task Performance (Perplexity) vs Speculator-Aware λ", fontsize=14)
+    _save_plot(fig, output_dir, "plot_task_eval_perplexity")
+
+    # Also generate a dual-axis plot: alpha and perplexity on same axes
+    # (requires EXP-4 acceptance data to be available)
+    _plot_task_alpha_tradeoff(results_dir, output_dir, df)
+
+
+def _plot_task_alpha_tradeoff(results_dir: Path, output_dir: Path, task_df: pd.DataFrame) -> None:
+    """Plot alpha and perplexity on dual y-axes to visualize the tradeoff.
+
+    Args:
+        results_dir: Root results directory (for loading EXP-4 alpha data).
+        output_dir: Directory to write plot files.
+        task_df: DataFrame with perplexity data from plot_task_eval.
+    """
+    # Load EXP-4 Llama alpha data
+    exp4_dir = results_dir / "exp4_llama"
+    if not exp4_dir or not exp4_dir.exists():
+        return
+
+    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+    has_data = False
+
+    for idx, domain in enumerate(DOMAINS):
+        ax1 = axes[idx]
+        ax2 = ax1.twinx()
+
+        # Alpha data from EXP-4
+        alpha_rows = []
+        for run_dir in sorted(exp4_dir.glob(f"{domain}_lam_*")):
+            acc_data = _load_json(run_dir / "eval_acceptance.json")
+            if acc_data is None:
+                continue
+            try:
+                lam = float(run_dir.name.split("_lam_")[1])
+            except (IndexError, ValueError):
+                continue
+            alpha_rows.append({"lambda": lam, "alpha": acc_data.get("alpha", acc_data.get("mean_alpha", 0))})
+
+        if not alpha_rows:
+            continue
+
+        adf = pd.DataFrame(alpha_rows).sort_values("lambda")
+        ax1.plot(adf["lambda"], adf["alpha"], marker="s", color=COLORS["spec_aware"],
+                 linewidth=2, markersize=6, label="α (acceptance rate)")
+
+        # Perplexity data
+        ppl_sweep = task_df[(task_df["domain"] == domain) & (task_df["lambda"] > 0)].sort_values("lambda")
+        if len(ppl_sweep) > 0:
+            ax2.plot(ppl_sweep["lambda"], ppl_sweep["perplexity"], marker="^",
+                     color=COLORS["code"], linewidth=2, markersize=6, label="Perplexity")
+            has_data = True
+
+        ax1.set_xlabel("λ")
+        ax1.set_ylabel("Acceptance Rate (α)", color=COLORS["spec_aware"])
+        ax2.set_ylabel("Perplexity", color=COLORS["code"])
+        ax1.set_title(f"{domain.capitalize()} Domain")
+
+        # Combined legend
+        lines1, labels1 = ax1.get_legend_handles_labels()
+        lines2, labels2 = ax2.get_legend_handles_labels()
+        ax1.legend(lines1 + lines2, labels1 + labels2, fontsize=9, loc="center right")
+
+    if has_data:
+        fig.suptitle("Task-α Tradeoff: Acceptance Rate vs Perplexity", fontsize=14)
+        _save_plot(fig, output_dir, "plot_task_alpha_tradeoff")
+    else:
+        plt.close(fig)
+
+
+# ---------------------------------------------------------------------------
+# Plot 10 — Loss Ablation Comparison (Both Families)
+# ---------------------------------------------------------------------------
+
+def plot_loss_ablation_combined(results_dir: Path, output_dir: Path) -> None:
+    """Generate side-by-side loss ablation comparison for Qwen and Llama.
+
+    Reads from ``results/exp6/`` (Qwen) and ``results/exp6_llama/`` (Llama).
+
+    Args:
+        results_dir: Root results directory.
+        output_dir: Directory to write plot files.
+    """
+    loss_order = ["kl", "reverse_kl", "js", "tv", "token_match"]
+
+    family_data = {}
+    for family, subdir in [("Qwen (λ=0.01)", "exp6"), ("Llama (λ=0.5)", "exp6_llama")]:
+        exp_dir = results_dir / subdir
+        if not exp_dir.exists():
+            continue
+
+        alphas = {}
+        # Try consolidated file first
+        consolidated = _load_json(exp_dir / "loss_ablation.json")
+        if consolidated is not None:
+            for lt in loss_order:
+                if lt in consolidated:
+                    entry = consolidated[lt]
+                    alphas[lt] = entry.get("mean_alpha", entry.get("alpha", 0))
+        else:
+            # Try individual run directories
+            for lt in loss_order:
+                for run_dir in exp_dir.glob(f"*{lt}*"):
+                    acc_data = _load_json(run_dir / "eval_acceptance.json")
+                    if acc_data is not None:
+                        alphas[lt] = acc_data.get("mean_alpha", acc_data.get("alpha", 0))
+                        break
+
+        if alphas:
+            family_data[family] = alphas
+
+    if not family_data:
+        logger.warning("Skipping plot_loss_ablation_combined: no data found.")
+        return
+
+    fig, axes = plt.subplots(1, len(family_data), figsize=(7 * len(family_data), 5))
+    if len(family_data) == 1:
+        axes = [axes]
+
+    palette = sns.color_palette("Set2", n_colors=len(loss_order))
+    labels = [LOSS_TYPE_LABELS.get(lt, lt) for lt in loss_order]
+
+    for idx, (family, alphas) in enumerate(family_data.items()):
+        ax = axes[idx]
+        vals = [alphas.get(lt, 0) for lt in loss_order]
+        x = np.arange(len(loss_order))
+
+        # Sort by alpha for visual clarity
+        sorted_pairs = sorted(zip(vals, labels, palette), reverse=True)
+        sorted_vals, sorted_labels, sorted_colors = zip(*sorted_pairs)
+
+        bars = ax.bar(range(len(sorted_vals)), sorted_vals, color=sorted_colors,
+                      edgecolor="white", linewidth=0.8)
+        ax.set_xticks(range(len(sorted_labels)))
+        ax.set_xticklabels(sorted_labels, rotation=15, ha="right")
+        ax.set_ylabel("Acceptance Rate (α)")
+        ax.set_title(family)
+        _add_bar_labels(ax)
+
+        # Rank annotation
+        for j, (v, l) in enumerate(zip(sorted_vals, sorted_labels)):
+            ax.annotate(f"#{j+1}", (j, v), textcoords="offset points",
+                       xytext=(0, 15), ha="center", fontsize=9, fontweight="bold")
+
+    fig.suptitle("Loss Function Ablation — Ranking Inverts with λ", fontsize=14)
+    _save_plot(fig, output_dir, "plot_loss_ablation_combined")
+
+
+# ---------------------------------------------------------------------------
 # Summary Table
 # ---------------------------------------------------------------------------
 
@@ -990,7 +1337,10 @@ def main() -> None:
 
     plot_cross_domain(results_dir, output_dir)
     plot_loss_ablation(results_dir, output_dir)
+    plot_loss_ablation_combined(results_dir, output_dir)
     plot_complementarity(results_dir, output_dir)
+    plot_argmax_diagnostic(results_dir, output_dir)
+    plot_task_eval(results_dir, output_dir)
 
     # Summary table
     summary_df = generate_summary_table(results_dir)

@@ -83,7 +83,40 @@ Models trained with spec-aware loss on one domain maintain reasonable α on othe
 | KL | 0.5405 | 4th |
 | Reverse KL | 0.5300 | Worst |
 
-Jensen-Shannon divergence marginally outperforms forward KL as the regularization loss.
+At low λ, JS divergence marginally outperforms KL. However, the ranking **inverts at higher λ**:
+
+**EXP-6: Loss Ablation (Llama, λ=0.5)**
+
+| Loss Type | α | Ranking |
+|-----------|------|---------|
+| KL | 0.5881 | Best |
+| Reverse KL | 0.5776 | 2nd |
+| TV | 0.5583 | 3rd |
+| Token Match | 0.5509 | 4th |
+| JS | 0.5505 | Worst |
+
+Optimal loss depends on the λ regime: JS at low λ (bounded, stable), KL at high λ (stronger alignment).
+
+### Argmax Agreement Diagnostic
+
+Spec-aware FT increases argmax(target)==argmax(draft) above base in all cases, directly validating the mechanism:
+
+| Family | Base | Standard FT | Spec-Aware |
+|--------|------|-------------|------------|
+| Llama Code | 0.770 | 0.758 (-1.6%) | **0.790** (+2.6%) |
+| Llama Chat | 0.677 | 0.655 (-3.3%) | **0.701** (+3.6%) |
+| Qwen Code | 0.752 | 0.739 (-1.6%) | **0.797** (+6.0%) |
+| Qwen Chat | 0.649 | 0.663 (+2.2%) | **0.725** (+11.7%) |
+
+### Task Performance (Perplexity)
+
+The task-α tradeoff is mild — at λ=0.5, perplexity is *better* than base:
+
+| Condition | Code | Medical | Chat |
+|-----------|------|---------|------|
+| Base | 5.14 | 7.47 | 4.14 |
+| Standard FT | 6.19 (+20%) | 7.72 (+3%) | **3.77** (-9%) |
+| Spec-Aware λ=0.5 | **5.04** (-2%) | **7.12** (-5%) | 3.75 (-9%) |
 
 ### EXP-7: Complementarity with Runtime Adaptation (Qwen)
 
@@ -120,7 +153,7 @@ Both approaches improve with draft adaptation. For Llama (where standard FT degr
 | 3 | Speculator-aware fine-tuning (core) | Done | Done |
 | 4 | Lambda sweep + Pareto analysis | Done | Done |
 | 5 | Cross-domain analysis | Done | — |
-| 6 | Loss function ablation | Done | — |
+| 6 | Loss function ablation | Done | Done |
 | 7 | Complementarity with runtime adaptation | Done | — |
 
 ## Quick Start

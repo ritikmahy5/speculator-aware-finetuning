@@ -638,3 +638,109 @@ A re-run at higher λ (e.g., 0.5 or 1.0) would amplify these differences and pro
 | Chat | 0.3784 | 0.2517 | 0.2624 | 0.3554 | **0.4063** |
 
 **Key finding:** λ=1.0 exceeds base α in ALL three domains for Llama models. The chat domain benefits most dramatically from speculator-aware training, consistent with it having the largest distributional shift from standard fine-tuning.
+
+## Llama EXP-6 — Loss Function Ablation (λ=0.5, Code Domain)
+
+**Job:** 5162671 (gpu partition, H200)
+**Config:** λ=0.5, Llama code domain, 5 loss variants
+**Rationale:** Qwen EXP-6 at λ=0.01 showed minimal differentiation (2pp spread, p=0.46). Running at λ=0.5 on Llama — where there's real degradation to prevent — should amplify differences between loss types.
+
+**Reference points:**
+- Base α (code): 0.5954
+- Standard FT α (code): 0.5449
+- Spec-aware KL λ=0.5 from EXP-4: 0.5881
+
+| Loss Type | α | Ranking | vs Base | vs Std FT |
+|-----------|--------|---------|---------|-----------|
+| KL divergence | **0.5881** | **1st** | -1.2% | +7.9% |
+| Reverse KL | 0.5776 | 2nd | -3.0% | +6.0% |
+| TV distance | 0.5583 | 4th | -6.2% | +2.5% |
+| Token match | 0.5509 | 3rd | -7.5% | +1.1% |
+| JS divergence | 0.5505 | **5th** | -7.5% | +1.0% |
+
+### Llama EXP-6 Observations
+
+1. **KL is the clear winner at higher λ** — ranking is completely inverted from Qwen at λ=0.01. KL (1st) was 4th in Qwen; JS (5th) was 1st in Qwen.
+
+2. **The spread is much larger** — 3.8pp (0.5881 vs 0.5505) compared to 2.1pp at Qwen λ=0.01. Higher λ does amplify loss type differences as predicted.
+
+3. **Reverse KL is 2nd, not last** — at λ=0.01 it was worst. Its mode-seeking behavior may be beneficial at higher λ where we want to strongly concentrate probability on draft-aligned tokens.
+
+4. **JS and Token Match are near-tied at the bottom** — this is surprising since JS was the recommendation from Qwen EXP-6. The bounded, symmetric nature of JS that helped at low λ may be a liability at high λ — it can't exert as strong a gradient as unbounded KL.
+
+5. **Key insight: optimal loss type depends on λ regime.** At low λ (0.01), bounded losses like JS are preferable (stable gradients, less noise). At high λ (0.5), unbounded KL provides stronger distributional alignment. This suggests an adaptive strategy: use JS at low λ, KL at high λ.
+
+6. **All loss types beat standard FT** — even the worst (JS at 0.5505) still improves over standard FT (0.5449) by 1.0%, confirming that any distributional regularizer helps when degradation is present.
+
+## Argmax Agreement Diagnostic
+
+**Jobs:** 5169365 (A100), completed 2026-03-17
+**Measures:** argmax(target) == argmax(draft) agreement rate and top-5 overlap across both model families, 3 conditions (base, standard FT, spec-aware FT), 3 domains.
+
+### Llama Argmax Agreement
+
+| Condition | Code | Medical | Chat |
+|-----------|------|---------|------|
+| Base | 0.7699 | 0.7198 | 0.6771 |
+| Standard FT | 0.7576 (-1.6%) | 0.6830 (-5.1%) | 0.6548 (-3.3%) |
+| Spec-Aware FT | **0.7896** (+2.6%) | **0.7259** (+0.8%) | **0.7012** (+3.6%) |
+
+### Qwen Argmax Agreement
+
+| Condition | Code | Medical | Chat |
+|-----------|------|---------|------|
+| Base | 0.7516 | 0.7101 | 0.6493 |
+| Standard FT | 0.7393 (-1.6%) | 0.6920 (-2.5%) | 0.6634 (+2.2%) |
+| Spec-Aware FT | **0.7966** (+6.0%) | **0.7467** (+5.2%) | **0.7253** (+11.7%) |
+
+### Top-5 Overlap
+
+| Family | Condition | Code | Medical | Chat |
+|--------|-----------|------|---------|------|
+| Llama | Base | 0.6819 | 0.6202 | 0.6626 |
+| Llama | Standard FT | 0.6618 | 0.5949 | 0.6321 |
+| Llama | Spec-Aware | **0.7052** | **0.6631** | **0.7018** |
+| Qwen | Base | 0.6975 | 0.6224 | 0.6606 |
+| Qwen | Standard FT | 0.6871 | 0.6180 | 0.6577 |
+| Qwen | Spec-Aware | **0.7447** | **0.6743** | **0.7129** |
+
+### Argmax Observations
+
+1. **Standard FT reduces argmax agreement in both families** — Llama drops 1.6-5.1%, Qwen drops 1.6-2.5% (except Qwen chat +2.2%). This confirms that fine-tuning disrupts token-level alignment even when aggregate α doesn't drop (Qwen).
+
+2. **Spec-aware FT increases argmax agreement above base in ALL cases** — both families, all domains. Llama gains 0.8-3.6%, Qwen gains 5.2-11.7%. This directly validates the mechanism: KL regularization preserves (and enhances) the token-level agreement that drives speculative decoding acceptance.
+
+3. **Qwen shows larger argmax gains than Llama** — despite Qwen not showing α degradation from standard FT. This explains why Qwen's α improved with spec-aware training: the KL term actively pushes argmax agreement higher.
+
+4. **Top-5 overlap follows the same pattern** — spec-aware FT improves top-5 overlap across the board. The effect is consistent: regularization doesn't just preserve the top-1 pick but also aligns the broader probability ranking.
+
+5. **Medical shows the largest std FT drop** for both families (Llama -5.1%, Qwen -2.5%), consistent with medical having the most distinctive vocabulary shift from fine-tuning.
+
+## Task Performance Evaluation (Perplexity)
+
+**Job:** 5169364 (A100), completed 2026-03-17
+**Measures:** Held-out perplexity for base model, standard FT, and spec-aware FT at λ=0.1, 0.5, 1.0 across all 3 domains. 200 samples for chat, 100 for code/medical.
+
+### Perplexity Results
+
+| Condition | Code | Medical | Chat |
+|-----------|------|---------|------|
+| Base (no FT) | 5.14 | 7.47 | 4.14 |
+| Standard FT | 6.19 (+20.4%) | 7.72 (+3.3%) | **3.77** (-8.9%) |
+| Spec-Aware λ=0.1 | 5.64 (+9.7%) | **7.08** (-5.2%) | **3.71** (-10.4%) |
+| Spec-Aware λ=0.5 | **5.04** (-1.9%) | 7.12 (-4.7%) | 3.75 (-9.4%) |
+| Spec-Aware λ=1.0 | 5.13 (-0.2%) | 7.44 (-0.4%) | 3.86 (-6.8%) |
+
+### Task Eval Observations
+
+1. **Standard FT hurts code perplexity significantly** — 5.14→6.19 (+20.4%). The model overfits to code training data in a way that raises held-out perplexity. Spec-aware regularization at λ=0.5 actually *improves* over base (5.04, -1.9%).
+
+2. **The task-α tradeoff is remarkably mild.** At λ=0.5 — which recovers α to within 1.2% of base — perplexity is better than base on code and medical. At λ=1.0 — which exceeds base α — perplexity is within 0.4% of base on code and medical.
+
+3. **Chat perplexity improves with any fine-tuning** — all conditions beat the base model. Standard FT achieves the best chat perplexity (3.77), with spec-aware λ=0.1 close behind (3.71).
+
+4. **Medical perplexity improves with moderate λ** — λ=0.1 achieves the best medical perplexity (7.08), better than both base and standard FT. Higher λ gradually returns toward base.
+
+5. **No evidence of a harsh tradeoff.** The conventional wisdom is that regularization should hurt task performance. Instead, spec-aware loss at moderate λ actually *improves* perplexity on 2 of 3 domains while simultaneously preserving α. This suggests the KL regularization acts as a beneficial regularizer against overfitting.
+
+6. **λ=0.5 is the clear practical sweet spot** — best or near-best perplexity on all domains while recovering α to within 1-6% of base across all domains.
