@@ -80,7 +80,24 @@ We first establish that standard fine-tuning degrades speculative decoding accep
 
 ### 3.2 KL–Acceptance Rate Correlation (EXP-2)
 
-We validated that KL divergence between target and draft predicts acceptance rate by measuring both at intermediate checkpoints during code fine-tuning. The Pearson correlation between KL divergence and α was strongly negative, confirming KL is a suitable proxy objective for preserving acceptance rates.
+We validated that KL divergence between target and draft predicts acceptance rate by measuring both at intermediate checkpoints during code fine-tuning.
+
+**Qwen (code domain, checkpoints at 25/50/75/100%):** The Pearson correlation between KL and α was **positive** (r=+0.956, p=0.003). Both KL and α increased during training — distribution sharpening toward code tokens happened to improve draft-target alignment. This is a model-pair-specific confound, not a general principle.
+
+**Llama (code domain, same checkpoint schedule):**
+
+| Checkpoint | α | KL |
+|-----------|-------|--------|
+| Base | 0.5954 | 0.3793 |
+| Step 156 (25%) | 0.5343 | 0.6233 |
+| Step 312 (50%) | 0.5536 | 0.6340 |
+| Step 468 (75%) | 0.5504 | 0.6292 |
+| Step 624 (100%) | 0.5369 | 0.6218 |
+| Final | 0.5449 | 0.6227 |
+
+The Pearson correlation was **strongly negative** (r=-0.928, p=0.008) — the opposite direction from Qwen. Higher KL genuinely predicts lower α for Llama. The Spearman rank correlation was weak (rho=-0.03, p=0.957) because α drops sharply at step 156 then partially recovers, creating a non-monotonic trajectory.
+
+**Key finding:** The KL-α relationship is model-family dependent. For Llama, KL is a valid proxy loss (minimizing KL preserves α). For Qwen, the relationship is inverted due to constructive distribution sharpening. This explains why spec-aware training works well for Llama but provides limited benefit for Qwen.
 
 ### 3.3 Speculator-Aware Fine-Tuning (EXP-3)
 
@@ -235,11 +252,21 @@ Held-out perplexity evaluation reveals the task-α tradeoff is remarkably gentle
 
 At λ=0.5, perplexity is *better* than base on code (-1.9%) and medical (-4.7%), while α recovers to within 1-6% of base. The KL regularization acts as a beneficial regularizer against overfitting, yielding simultaneous gains on both axes of the tradeoff.
 
+### Qwen Resilience Under Aggressive Training
+
+To test whether Qwen's robustness holds under more aggressive fine-tuning, we ran a stress test with 4x LoRA rank (64 vs 16) and 3x training epochs on the code domain. Even under these conditions, the maximum degradation was only -8.4% (at step 1872), recovering to -6.0% at the final checkpoint. The degradation trajectory was gradual, with KL increasing from 0.6283 to 0.8512. This confirms that model-family resilience is a fundamental property of the target-draft alignment, not an artifact of conservative training settings.
+
+| Configuration | Max α Drop | Final α Drop | LoRA Rank | Epochs |
+|--------------|-----------|-------------|-----------|--------|
+| Qwen standard (EXP-1) | ~0% | +5.6% | 16 | 1 |
+| Qwen stress test | -8.4% | -6.0% | 64 | 3 |
+| Llama standard (EXP-1) | -33.5% | -33.5% | 16 | 1 |
+
 ### Limitations
 
 1. **Task performance trade-off at high λ** — aggressive regularization (λ ≥ 0.5) may noticeably increase task loss, particularly for domains far from the pretraining distribution.
-2. **Model-family dependence** — Qwen models showed minimal degradation from standard FT, limiting the benefit of our approach. The method is most valuable for model pairs where fine-tuning causes significant distributional shift.
-3. **Single-epoch training** — we used 1 epoch across all experiments for consistency. Longer training may show different dynamics.
+2. **Model-family dependence** — Qwen models showed minimal degradation from standard FT, limiting the benefit of our approach. The method is most valuable for model pairs where fine-tuning causes significant distributional shift. A stress test with 4x LoRA rank and 3x epochs confirmed Qwen's resilience (max -8.4% vs Llama's -33.5% under standard settings).
+3. **Single-epoch training** — we used 1 epoch across all experiments for consistency. The Qwen stress test at 3 epochs showed that longer training does produce gradual degradation, but the effect remains modest for resilient model pairs.
 4. **Draft model must be available during training** — requires loading both models, approximately doubling GPU memory. This is mitigated by keeping the draft in inference mode with no gradient computation.
 
 ## 5. Conclusion

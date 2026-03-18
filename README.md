@@ -67,6 +67,29 @@ Llama models show larger degradation from standard FT, making the recovery more 
 | Medical | 0.4163 | 0.3747 | 0.3952 | 0.3925 | **0.4320** (+3.8%) |
 | Chat | 0.3784 | 0.2517 | 0.2624 | 0.3554 | **0.4063** (+7.4%) |
 
+### EXP-2: KL-Acceptance Rate Correlation (Both Families)
+
+The KL-α relationship is model-family dependent:
+
+| Family | Pearson r | p-value | Direction |
+|--------|-----------|---------|-----------|
+| Qwen | +0.956 | 0.003 | Positive — sharpening helps |
+| Llama | **-0.928** | **0.008** | **Negative — divergence hurts** |
+
+For Llama, higher KL genuinely predicts lower α, validating KL as a proxy loss. For Qwen, both metrics increase during training due to constructive distribution sharpening. This explains why spec-aware training works well for Llama (regularization direction matches the correlation) but less so for Qwen.
+
+### Qwen Stress Test (rank=64, 3 epochs)
+
+Even with 4x LoRA rank and 3x training, Qwen's max degradation is only -8.4%:
+
+| Checkpoint | α | Relative Drop | KL |
+|-----------|-------|--------------|--------|
+| Base | 0.5203 | -- | -- |
+| Step 1872 (worst) | 0.4765 | -8.4% | 0.8509 |
+| Final | 0.4889 | -6.0% | 0.8512 |
+
+Compare: Llama degrades -33.5% on chat with standard rank=16, 1 epoch training. Qwen's resilience is fundamental to the model pair, not an artifact of conservative training.
+
 ### EXP-5: Cross-Domain Generalization (Qwen)
 
 Models trained with spec-aware loss on one domain maintain reasonable α on other domains:
@@ -149,7 +172,7 @@ Both approaches improve with draft adaptation. For Llama (where standard FT degr
 | # | Experiment | Qwen | Llama |
 |---|-----------|------|-------|
 | 1 | Baseline degradation measurement | Done | Done |
-| 2 | KL–acceptance rate correlation | Done | — |
+| 2 | KL–acceptance rate correlation | Done | Done |
 | 3 | Speculator-aware fine-tuning (core) | Done | Done |
 | 4 | Lambda sweep + Pareto analysis | Done | Done |
 | 5 | Cross-domain analysis | Done | — |

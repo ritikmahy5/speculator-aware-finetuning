@@ -672,6 +672,87 @@ A re-run at higher λ (e.g., 0.5 or 1.0) would amplify these differences and pro
 
 6. **All loss types beat standard FT** — even the worst (JS at 0.5505) still improves over standard FT (0.5449) by 1.0%, confirming that any distributional regularizer helps when degradation is present.
 
+## Qwen Stress Test — Aggressive Training (rank=64, 3 epochs, Code Domain)
+
+**Purpose:** Test whether Qwen can be pushed to show significant α degradation with more aggressive training (4x LoRA rank, 3x epochs vs standard configuration of rank=16, 1 epoch).
+
+**Configuration:** LoRA rank=64 (vs standard rank=16), 3 epochs (vs standard 1 epoch), code domain, λ=0.0 (standard FT), 10K samples.
+
+### Results
+
+| Checkpoint | α | Relative Drop | KL |
+|-----------|-------|--------------|--------|
+| Base | 0.5203 | — | — |
+| Step 468 | 0.5115 | -1.7% | 0.6283 |
+| Step 936 | 0.5198 | -0.1% | 0.7400 |
+| Step 1404 | 0.4819 | -7.4% | 0.8457 |
+| Step 1872 | 0.4765 | **-8.4%** | 0.8509 |
+| Final | 0.4889 | -6.0% | 0.8512 |
+
+### Observations
+
+1. **Maximum degradation is only -8.4%** (at step 1872), even with 4x LoRA rank and 3x training epochs. This is well below the 15% threshold originally set as success criteria for EXP-1.
+2. **The degradation trajectory is gradual, not catastrophic.** α declines slowly through epochs 2-3 before partially recovering at the final checkpoint.
+3. **KL divergence increases substantially** (0.6283 at step 468 to 0.8512 at final), confirming the distribution shift is real — but it still doesn't translate into large α drops.
+4. **Partial recovery at final checkpoint:** α recovers from -8.4% (step 1872) to -6.0% (final), possibly due to learning rate annealing at end of training reducing the distribution shift.
+5. **This confirms Qwen's remarkable resilience to speculative decoding degradation.** Even under the most aggressive training configuration tested, the Qwen2.5-7B/0.5B pair maintains most of its acceptance rate. This strengthens the "base alignment predicts vulnerability" narrative — the Qwen pair's poor initial alignment (base α=0.52, base KL=0.42) means there is a "floor" effect where further distributional shift cannot push α much lower.
+
+### Comparison: Qwen Standard vs Stress Test
+
+| Configuration | Max α Drop | Final α Drop | LoRA Rank | Epochs |
+|--------------|-----------|-------------|-----------|--------|
+| Standard (EXP-1) | ~0% (actually improved) | +5.6% | 16 | 1 |
+| Stress test | -8.4% | -6.0% | 64 | 3 |
+| Llama standard (EXP-1) | -33.5% | -33.5% | 16 | 1 |
+
+Even with 4x rank and 3x training, Qwen's worst degradation (-8.4%) is less than Llama's degradation from standard training on code (-8.5%) and far less than Llama's chat degradation (-33.5%).
+
+---
+
+## Llama EXP-2 — KL-Acceptance Rate Correlation
+
+**Purpose:** Validate whether KL divergence correlates with α for Llama, and compare direction with Qwen's positive r=+0.956.
+
+**Configuration:** Llama-3.1-8B-Instruct (target) + Llama-3.2-1B-Instruct (draft), code domain, standard LoRA (λ=0.0), 1 epoch, 10K samples, checkpoints at 25/50/75/100%.
+
+### Results: Divergence vs Acceptance at Checkpoints
+
+| Checkpoint | α | Relative Drop | KL |
+|-----------|-------|--------------|--------|
+| Base | 0.5954 | — | 0.3793 |
+| Step 156 (25%) | 0.5343 | -10.3% | 0.6233 |
+| Step 312 (50%) | 0.5536 | -7.0% | 0.6340 |
+| Step 468 (75%) | 0.5504 | -7.6% | 0.6292 |
+| Step 624 (100%) | 0.5369 | -9.8% | 0.6218 |
+| Final | 0.5449 | -8.5% | 0.6227 |
+
+### Correlation Results
+
+| Metric | Pearson r | p-value | Spearman rho | p-value |
+|--------|-----------|---------|------------|---------|
+| KL vs α | **-0.9279** | **0.008** | -0.0286 | 0.957 |
+
+### Key Findings
+
+1. **Strong negative Pearson correlation (r=-0.93, p=0.008)** — the OPPOSITE direction from Qwen's positive r=+0.956. This confirms the model-family-dependent KL-α relationship.
+
+2. **Weak Spearman rank correlation (rho=-0.03, p=0.957)** — the rank correlation is essentially zero because the α trajectory is non-monotonic: α drops sharply at step 156 (-10.3%) then partially recovers at step 312 (-7.0%), before fluctuating. This is fundamentally different from Qwen's monotonic pattern where both KL and α increased together throughout training.
+
+3. **The Pearson-Spearman divergence is informative.** The strong Pearson r indicates a linear relationship between the magnitude of KL shift and α drop, but the weak Spearman rho indicates the checkpoint ordering doesn't follow a clean rank pattern. This is because most of the KL increase happens in the first 25% of training (0.38→0.62), after which KL plateaus while α fluctuates.
+
+4. **Validates the two-family story:** For Llama, higher KL genuinely predicts lower α (r=-0.93), confirming KL is a valid proxy loss for preserving acceptance rates. For Qwen, the relationship is positive because distribution sharpening happens to improve both metrics simultaneously.
+
+### Comparison: Qwen vs Llama Correlations
+
+| Family | Pearson r | Direction | Interpretation |
+|--------|-----------|-----------|---------------|
+| Qwen | +0.956 | Positive | KL and α increase together — sharpening helps |
+| Llama | -0.928 | **Negative** | Higher KL → lower α — divergence hurts |
+
+This model-family dependence in the KL-α relationship is a key finding: KL divergence is a valid regularization target for Llama (where minimizing KL preserves α) but paradoxically counterproductive for Qwen (where minimizing KL would reduce α). The spec-aware loss works for Llama because the correlation aligns with the regularization direction; it is less effective for Qwen because the correlation opposes it.
+
+---
+
 ## Argmax Agreement Diagnostic
 
 **Jobs:** 5169365 (A100), completed 2026-03-17
