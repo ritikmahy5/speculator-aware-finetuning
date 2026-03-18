@@ -825,3 +825,45 @@ This model-family dependence in the KL-α relationship is a key finding: KL dive
 5. **No evidence of a harsh tradeoff.** The conventional wisdom is that regularization should hurt task performance. Instead, spec-aware loss at moderate λ actually *improves* perplexity on 2 of 3 domains while simultaneously preserving α. This suggests the KL regularization acts as a beneficial regularizer against overfitting.
 
 6. **λ=0.5 is the clear practical sweet spot** — best or near-best perplexity on all domains while recovering α to within 1-6% of base across all domains.
+
+---
+
+## Gemma 2 EXP-1 — Baseline Degradation (Gemma 2 9B + Gemma 2 2B)
+
+**Date:** 2026-03-18
+**Models:** google/gemma-2-9b-it (target) + google/gemma-2-2b-it (draft), size ratio 4.5x
+**Training:** Standard LoRA, λ=0.0, 1 epoch, 10K samples per domain
+
+### Acceptance Rate Results
+
+| Domain | Base α | Post-FT α | Relative Drop | Base KL | Post-FT KL |
+|--------|--------|-----------|--------------|---------|------------|
+| Code | 0.6247 | 0.6056 | -3.0% | 0.4341 | 0.7207 |
+| Medical | 0.3976 | 0.3372 | -15.2% | 0.4171 | 1.2537 |
+| Chat | 0.3984 | 0.2815 | **-29.3%** | 0.4807 | 1.9864 |
+
+### Three-Family Comparison
+
+| Family | Size Ratio | Code Drop | Medical Drop | Chat Drop |
+|--------|-----------|----------|-------------|----------|
+| Llama | 8x | -8.5% | -10.0% | -33.5% |
+| Gemma | 4.5x | -3.0% | -15.2% | -29.3% |
+| Qwen | 14x | +5.6% | +5.1% | +14.0% |
+
+### Observations
+
+1. **Gemma shows significant degradation, consistent with Llama.** Two of three model families now exhibit the degradation problem, with Qwen as the outlier. This strengthens the generalizability claim for speculator-aware fine-tuning.
+
+2. **Chat is the most affected domain across all degrading families.** Gemma chat drops 29.3%, Llama chat drops 33.5%. Both are well above the 15% success criterion from EXP-1.
+
+3. **Medical degradation is stronger for Gemma than Llama.** Gemma medical drops 15.2% vs Llama's 10.0%. The KL shift is correspondingly larger (0.42 to 1.25, a 3x increase).
+
+4. **Code is most resilient across all families.** Gemma code drops only 3.0%, Llama code 8.5%, and Qwen code actually improves. Code data is closest to pretraining distributions for all models.
+
+5. **Gemma has the highest base α on code (0.6247)** and correspondingly the mildest code drop (-3.0%). The well-aligned pair has more room to degrade on domains with larger distribution shift (medical, chat) but the code alignment is strong enough to resist.
+
+6. **Base KL is low for Gemma (0.43-0.48), similar to Llama (0.38-0.60).** This is consistent with the "well-aligned pairs are vulnerable" thesis established in the two-family analysis. Qwen's higher base KL (0.42-0.72) corresponds to its resilience.
+
+7. **Chat KL shift is massive for Gemma** — from 0.48 to 1.99, a 4.1x increase. This is the largest KL shift observed across all three families and explains the large α drop. For comparison, Llama chat KL went from 0.60 to 1.09 (1.8x increase).
+
+8. **The degradation problem generalizes across model families.** With Gemma as a third data point, the pattern is clear: model pairs with low base KL and high base α are vulnerable to fine-tuning-induced speculative decoding degradation. Qwen's resilience appears to be the exception, not the rule.

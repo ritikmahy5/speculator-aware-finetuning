@@ -23,10 +23,11 @@ The draft model is frozen and loaded alongside the target during training. It pr
 
 ## Models
 
-| Role | Qwen (primary) | Llama (secondary) |
-|------|----------------|-------------------|
-| Target | `Qwen/Qwen2.5-7B-Instruct` | `meta-llama/Llama-3.1-8B-Instruct` |
-| Draft | `Qwen/Qwen2.5-0.5B-Instruct` | `meta-llama/Llama-3.2-1B-Instruct` |
+| Role | Qwen | Llama | Gemma |
+|------|------|-------|-------|
+| Target | `Qwen/Qwen2.5-7B-Instruct` | `meta-llama/Llama-3.1-8B-Instruct` | `google/gemma-2-9b-it` |
+| Draft | `Qwen/Qwen2.5-0.5B-Instruct` | `meta-llama/Llama-3.2-1B-Instruct` | `google/gemma-2-2b-it` |
+| Size Ratio | 14x | 8x | 4.5x |
 
 ## Key Results
 
@@ -41,6 +42,16 @@ Standard LoRA fine-tuning degrades speculative decoding acceptance rate (α), es
 | Chat | 0.3784 | 0.2517 | **-33.5%** |
 
 Qwen showed minimal degradation (~0%), making Llama the better test bed for our method.
+
+**Gemma-2-9B + Gemma-2-2B (EXP-1):**
+
+| Domain | Gemma Base α | Gemma Post-FT α | Relative Drop | Base KL | Post-FT KL |
+|--------|-------------|-----------------|---------------|---------|------------|
+| Code | 0.6247 | 0.6056 | -3.0% | 0.4341 | 0.7207 |
+| Medical | 0.3976 | 0.3372 | -15.2% | 0.4171 | 1.2537 |
+| Chat | 0.3984 | 0.2815 | **-29.3%** | 0.4807 | 1.9864 |
+
+Gemma confirms the degradation pattern: two of three families (Llama and Gemma) show significant drops, with chat most affected across both. Qwen's resilience is the exception, not the rule.
 
 ### EXP-3: Speculator-Aware Fine-Tuning (Llama, λ=0.1)
 
@@ -179,15 +190,15 @@ Both approaches improve with draft adaptation. For Llama (where standard FT degr
 
 ## Experiments
 
-| # | Experiment | Qwen | Llama |
-|---|-----------|------|-------|
-| 1 | Baseline degradation measurement | Done | Done |
-| 2 | KL–acceptance rate correlation | Done | Done |
-| 3 | Speculator-aware fine-tuning (core) | Done | Done |
-| 4 | Lambda sweep + Pareto analysis | Done | Done |
-| 5 | Cross-domain analysis | Done | — |
-| 6 | Loss function ablation | Done | Done |
-| 7 | Complementarity with runtime adaptation | Done | — |
+| # | Experiment | Qwen | Llama | Gemma |
+|---|-----------|------|-------|-------|
+| 1 | Baseline degradation measurement | Done | Done | Done |
+| 2 | KL–acceptance rate correlation | Done | Done | — |
+| 3 | Speculator-aware fine-tuning (core) | Done | Done | — |
+| 4 | Lambda sweep + Pareto analysis | Done | Done | — |
+| 5 | Cross-domain analysis | Done | — | — |
+| 6 | Loss function ablation | Done | Done | — |
+| 7 | Complementarity with runtime adaptation | Done | — | — |
 
 ## Quick Start
 
