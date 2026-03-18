@@ -132,7 +132,7 @@ echo "============================================"
 python -c "
 import json, os, glob
 out_dir = '$OUT_DIR'
-print(f'{'Checkpoint':25s} {'Benchmark':15s} {'Score':>10s}')
+print(f\"{'Checkpoint':25s} {'Benchmark':15s} {'Score':>10s}\")
 print('-' * 55)
 for f in sorted(glob.glob(os.path.join(out_dir, 'qwen_*.json'))):
     name = os.path.basename(f).replace('.json', '')

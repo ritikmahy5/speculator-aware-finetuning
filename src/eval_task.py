@@ -157,12 +157,10 @@ def run_lm_eval(
         batch_size=batch_size,
     )
 
-    task_manager = lm_eval.tasks.TaskManager()
     results = lm_eval.simple_evaluate(
         model=lm,
         tasks=tasks,
         num_fewshot=num_fewshot,
-        task_manager=task_manager,
     )
 
     # Extract key metrics
