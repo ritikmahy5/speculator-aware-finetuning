@@ -1,0 +1,15 @@
+{
+  "lm_eval": {
+    "humaneval": {
+      "pass@1,create_test": 0.6158536585365854,
+      "pass@1_stderr,create_test": 0.03809722223934334
+    }
+  },
+  "target_model": "meta-llama/Llama-3.1-8B-Instruct",
+  "adapter_path": null,
+  "tasks": [
+    "humaneval"
+  ],
+  "domain": "code",
+  "seed": 42
+}

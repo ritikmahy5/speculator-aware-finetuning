@@ -1,0 +1,17 @@
+{
+  "lm_eval": {
+    "medqa_4options": {
+      "acc,none": 0.6339355852317361,
+      "acc_stderr,none": 0.013506964748043863,
+      "acc_norm,none": 0.6339355852317361,
+      "acc_norm_stderr,none": 0.013506964748043863
+    }
+  },
+  "target_model": "meta-llama/Llama-3.1-8B-Instruct",
+  "adapter_path": "results/exp1_llama/baseline_medical/final",
+  "tasks": [
+    "medqa_4options"
+  ],
+  "domain": "code",
+  "seed": 42
+}

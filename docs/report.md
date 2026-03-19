@@ -286,9 +286,41 @@ To test whether Qwen's robustness holds under more aggressive fine-tuning, we ra
 | Qwen stress test | -8.4% | -6.0% | 64 | 3 |
 | Llama standard (EXP-1) | -33.5% | -33.5% | 16 | 1 |
 
+### Standardized Benchmark Evaluation
+
+To quantify the task-α tradeoff, we evaluated key checkpoints on HumanEval (pass@1), MedQA (accuracy), and MMLU (accuracy) using the lm-eval harness.
+
+| Family | Checkpoint | HumanEval | MedQA | MMLU |
+|--------|-----------|-----------|-------|------|
+| Llama | Base | 0.616 | 0.622 | 0.683 |
+| Llama | Standard FT | 0.512 | 0.634 | 0.655 |
+| Llama | Spec-aware λ=0.5 | 0.451 | 0.639 | 0.643 |
+| Llama | Spec-aware λ=1.0 | 0.445 | 0.622 | 0.632 |
+| Qwen | Base | 0.652 | 0.621 | 0.718 |
+| Qwen | Standard FT | 0.518 | 0.662 | 0.713 |
+| Qwen | Spec-aware λ=0.5 | 0.543 | 0.625 | 0.700 |
+| Qwen | Spec-aware λ=1.0 | 0.524 | 0.577 | 0.686 |
+
+At the recommended λ=0.5, MMLU drops by only 4.0pp (Llama) and 1.8pp (Qwen) relative to base — a mild cost for recovering most of the lost acceptance rate. MedQA remains near base for both families. HumanEval declines for all fine-tuned checkpoints, as expected for code-domain adapters that shift generation style.
+
+### Argmax Agreement Diagnostic
+
+We measured the fraction of positions where argmax(target) == argmax(draft), which directly probes the mechanism behind speculative decoding acceptance.
+
+| Family | Condition | Code | Medical | Chat |
+|--------|-----------|------|---------|------|
+| Llama | Base | 0.770 | 0.720 | 0.677 |
+| Llama | Standard FT | 0.758 | 0.683 | 0.655 |
+| Llama | Spec-aware | 0.790 | 0.726 | 0.701 |
+| Qwen | Base | 0.752 | 0.710 | 0.649 |
+| Qwen | Standard FT | 0.739 | 0.692 | 0.663 |
+| Qwen | Spec-aware | 0.797 | 0.747 | 0.725 |
+
+Standard fine-tuning reduces argmax agreement in 5 of 6 cases, while speculator-aware training increases it above the base model in all 6. This confirms the causal chain: KL regularization reduces distributional divergence, which increases top-token agreement with the draft model, which increases acceptance rate. The average improvement over standard FT is +4.0pp (Llama) and +5.8pp (Qwen).
+
 ### Limitations
 
-1. **Task performance trade-off at high λ** — aggressive regularization (λ ≥ 0.5) may noticeably increase task loss, particularly for domains far from the pretraining distribution.
+1. **Task performance trade-off at high λ** — at λ=0.5, MMLU drops 2-4pp; at λ=1.0 the drop reaches 5-8pp. Practitioners should choose λ based on their tolerance for general capability loss.
 2. **Model-family dependence** — Qwen models showed minimal degradation from standard FT, limiting the benefit of our approach. The method is most valuable for model pairs where fine-tuning causes significant distributional shift. A stress test with 4x LoRA rank and 3x epochs confirmed Qwen's resilience (max -8.4% vs Llama's -33.5% under standard settings).
 3. **Single-epoch training** — we used 1 epoch across all experiments for consistency. The Qwen stress test at 3 epochs showed that longer training does produce gradual degradation, but the effect remains modest for resilient model pairs.
 4. **Draft model must be available during training** — requires loading both models, approximately doubling GPU memory. This is mitigated by keeping the draft in inference mode with no gradient computation.

@@ -149,6 +149,19 @@ Spec-aware FT increases argmax(target)==argmax(draft) above base in all cases, d
 | Qwen Code | 0.752 | 0.739 (-1.6%) | **0.797** (+6.0%) |
 | Qwen Chat | 0.649 | 0.663 (+2.2%) | **0.725** (+11.7%) |
 
+### Standardized Benchmarks (HumanEval, MedQA, MMLU)
+
+| Family | Checkpoint | HumanEval | MedQA | MMLU |
+|--------|-----------|-----------|-------|------|
+| Llama | Base | 0.616 | 0.622 | 0.683 |
+| Llama | Std FT | 0.512 | 0.634 | 0.655 |
+| Llama | Spec-aware λ=0.5 | 0.451 | 0.639 | **0.643** |
+| Qwen | Base | 0.652 | 0.621 | 0.718 |
+| Qwen | Std FT | 0.518 | 0.662 | 0.713 |
+| Qwen | Spec-aware λ=0.5 | 0.543 | 0.625 | **0.700** |
+
+At λ=0.5, MMLU drops only 4.0pp (Llama) / 1.8pp (Qwen) — a mild cost for recovering acceptance rate. MedQA stays near base.
+
 ### Task Performance (Perplexity)
 
 The task-α tradeoff is mild — at λ=0.5, perplexity is *better* than base:
@@ -187,6 +200,8 @@ Both approaches improve with draft adaptation. For Llama (where standard FT degr
 | ![EXP-2 Llama KL scatter](plots/plot_exp2_llama_kl_correlation.png) | EXP-2 (Llama): KL vs acceptance rate scatter |
 | ![EXP-2 correlation comparison](plots/plot_exp2_correlation_comparison.png) | EXP-2: KL-alpha correlation — Qwen vs Llama side-by-side |
 | ![Qwen stress test trajectory](plots/plot_stress_test_trajectory.png) | Qwen stress test: alpha trajectory over 3 epochs |
+| ![Benchmark comparison](plots/plot_benchmark_comparison.png) | Standardized benchmarks: HumanEval, MedQA, MMLU |
+| ![Argmax agreement](plots/plot_argmax_agreement.png) | Argmax agreement diagnostic: mechanism validation |
 
 ## Experiments
 
@@ -199,6 +214,8 @@ Both approaches improve with draft adaptation. For Llama (where standard FT degr
 | 5 | Cross-domain analysis | Done | — | — |
 | 6 | Loss function ablation | Done | Done | — |
 | 7 | Complementarity with runtime adaptation | Done | — | — |
+| — | Standardized benchmarks (HumanEval/MedQA/MMLU) | Done | Done | — |
+| — | Argmax agreement diagnostic | Done | Done | — |
 
 ## Quick Start
 

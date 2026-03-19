@@ -1,0 +1,15 @@
+{
+  "lm_eval": {
+    "humaneval": {
+      "pass@1,create_test": 0.524390243902439,
+      "pass@1_stderr,create_test": 0.03911639983703664
+    }
+  },
+  "target_model": "Qwen/Qwen2.5-7B-Instruct",
+  "adapter_path": "results/exp4/code_lam_1.0/final",
+  "tasks": [
+    "humaneval"
+  ],
+  "domain": "code",
+  "seed": 42
+}

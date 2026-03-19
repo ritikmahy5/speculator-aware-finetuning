@@ -1,0 +1,17 @@
+{
+  "lm_eval": {
+    "medqa_4options": {
+      "acc,none": 0.6205813040062844,
+      "acc_stderr,none": 0.013605520207954047,
+      "acc_norm,none": 0.6205813040062844,
+      "acc_norm_stderr,none": 0.013605520207954047
+    }
+  },
+  "target_model": "Qwen/Qwen2.5-7B-Instruct",
+  "adapter_path": null,
+  "tasks": [
+    "medqa_4options"
+  ],
+  "domain": "code",
+  "seed": 42
+}
