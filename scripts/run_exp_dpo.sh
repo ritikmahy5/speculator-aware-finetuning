@@ -1,15 +1,18 @@
 #!/bin/bash
-#SBATCH --partition=multigpu
+#SBATCH --partition=gpu
 #SBATCH --nodes=1
-#SBATCH --gres=gpu:h200:2
-#SBATCH --cpus-per-task=16
-#SBATCH --mem=128GB
-#SBATCH --time=12:00:00
+#SBATCH --gres=gpu:h200:1
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=64GB
+#SBATCH --time=08:00:00
 #SBATCH --job-name=exp_dpo
 #SBATCH --output=logs/exp_dpo_%j.out
 #SBATCH --error=logs/exp_dpo_%j.err
 
 # Speculator-Aware DPO Experiment
+# Single H200 (140GB) — all 3 models fit on one GPU:
+#   target (~18GB) + reference 8-bit (~9GB) + draft (~2GB) = ~29GB
+#
 # Runs 4 experiments sequentially:
 #   1. Measure base acceptance rates
 #   2. Standard DPO (lambda=0.0) -> measure acceptance
@@ -63,7 +66,7 @@ if [ ! -d "results/exp_dpo/baseline/final" ]; then
     python -m src.train_dpo \
         --config configs/exp_dpo_baseline.yaml \
         --target_device cuda:0 \
-        --draft_device cuda:1
+        --draft_device cuda:0
     echo "  Standard DPO training complete."
 else
     echo "  Standard DPO already trained, skipping."
@@ -94,7 +97,7 @@ if [ ! -d "results/exp_dpo/specaware_lam0.1/final" ]; then
         --spec_loss.lam 0.1 \
         --output_dir results/exp_dpo/specaware_lam0.1 \
         --target_device cuda:0 \
-        --draft_device cuda:1
+        --draft_device cuda:0
     echo "  Spec-aware DPO (lambda=0.1) training complete."
 else
     echo "  Spec-aware DPO (lambda=0.1) already trained, skipping."
@@ -123,7 +126,7 @@ if [ ! -d "results/exp_dpo/specaware_lam0.5/final" ]; then
     python -m src.train_dpo \
         --config configs/exp_dpo_specaware.yaml \
         --target_device cuda:0 \
-        --draft_device cuda:1
+        --draft_device cuda:0
     echo "  Spec-aware DPO (lambda=0.5) training complete."
 else
     echo "  Spec-aware DPO (lambda=0.5) already trained, skipping."
