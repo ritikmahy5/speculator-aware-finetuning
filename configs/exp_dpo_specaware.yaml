@@ -1,0 +1,50 @@
+experiment_id: "EXP-DPO-SPECAWARE"
+hypothesis: "Speculator-aware DPO preserves acceptance rate during alignment"
+
+models:
+  target: "meta-llama/Llama-3.1-8B-Instruct"
+  draft: "meta-llama/Llama-3.2-1B-Instruct"
+
+domain: "chat"
+
+training:
+  num_epochs: 1
+  batch_size: 2
+  gradient_accumulation_steps: 8
+  learning_rate: 5e-5
+  weight_decay: 0.01
+  warmup_ratio: 0.1
+  max_seq_len: 1024
+  max_samples: 10000
+  scheduler: cosine
+  max_grad_norm: 1.0
+  bf16: true
+  seed: 42
+
+lora:
+  rank: 16
+  alpha: 32
+  dropout: 0.05
+  target_modules:
+    - q_proj
+    - k_proj
+    - v_proj
+    - o_proj
+    - gate_proj
+    - up_proj
+    - down_proj
+
+dpo:
+  beta: 0.1
+  dataset: "HuggingFaceH4/ultrafeedback_binarized"
+  reference_free: false
+
+spec_loss:
+  lam: 0.5
+  loss_type: "kl"
+
+logging:
+  log_every: 10
+  save_checkpoints_every: 500
+
+output_dir: "results/exp_dpo/specaware_lam0.5"
