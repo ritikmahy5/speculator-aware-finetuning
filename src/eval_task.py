@@ -161,6 +161,7 @@ def run_lm_eval(
         model=lm,
         tasks=tasks,
         num_fewshot=num_fewshot,
+        confirm_run_unsafe_code=True,
     )
 
     # Extract key metrics
