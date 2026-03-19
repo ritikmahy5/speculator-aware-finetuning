@@ -158,7 +158,7 @@ import json, os, glob
 results_dir = 'results/argmax_diagnostic'
 files = sorted(glob.glob(os.path.join(results_dir, '*.json')))
 
-print(f'{'Model':30s} {'Argmax Agree':>14s} {'Top5 Overlap':>14s}')
+print(f\"{'Model':30s} {'Argmax Agree':>14s} {'Top5 Overlap':>14s}\")
 print('-' * 60)
 for f in files:
     name = os.path.basename(f).replace('.json', '')
