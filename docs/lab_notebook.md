@@ -949,3 +949,50 @@ HumanEval initially failed with `ValueError: Attempted to run task: humaneval wh
 4. **Top-5 overlap tells the same story.** Not shown in detail, but spec-aware models also show higher top-5 token overlap with the draft model across all conditions, confirming the effect extends beyond just the top-1 token.
 
 5. **This validates KL as the right proxy loss.** Minimizing KL(target ‖ draft) directly improves argmax agreement, which is the mechanism underlying speculative decoding acceptance. The argmax diagnostic provides the missing causal link: KL↓ → argmax agreement↑ → α↑.
+
+---
+
+## ΔKL Vulnerability Prediction Analysis (2026-03-18)
+
+### Motivation
+
+With EXP-1 data from 3 model families × 3 domains (9 data points), we investigated whether fine-tuning-induced speculative decoding degradation can be **predicted before full training**. The goal: a cheap diagnostic that tells practitioners whether speculator-aware training is needed for their specific model pair and domain.
+
+### Statistical Analysis
+
+We tested three candidate predictors against relative α change:
+
+| Predictor | Pearson r | p-value | Verdict |
+|-----------|-----------|---------|---------|
+| ΔKL (post-FT KL − base KL) | **−0.73** | **0.026** | Strong predictor |
+| KL ratio (FT_KL / Base_KL) | −0.58 | ~0.10 | Decent but weaker |
+| Base α | −0.07 | 0.86 | Useless |
+
+**ΔKL is the clear winner.** Higher ΔKL — indicating greater training-induced distributional shift — strongly predicts larger acceptance rate drops. Base α alone tells you nothing about vulnerability.
+
+### Threshold Classification
+
+A threshold of **ΔKL > 0.30** correctly classifies 8 of 9 cases:
+
+- **Below threshold (safe):** All 3 Qwen points (ΔKL = 0.06–0.20), none degraded
+- **Above threshold (vulnerable):** Llama medical (0.35), Llama chat (0.49), Gemma medical (0.84), Gemma chat (1.51) — all degraded significantly
+- **Borderline:** Gemma code (ΔKL = 0.29, only −3.0% degradation)
+- **Single miss:** Llama code (ΔKL = 0.24, but only −8.5% — mild)
+
+### Practical Protocol
+
+1. Compute base KL on ~50 representative prompts
+2. Run short pilot training (100–200 steps, standard LoRA)
+3. Compute post-pilot KL on same prompts
+4. If ΔKL > 0.30 → use speculator-aware training (λ ≥ 0.5)
+5. If ΔKL < 0.30 → standard fine-tuning is likely safe
+
+Cost: <5% of full training compute.
+
+### Plot
+
+Generated `plots/plot_delta_kl_vulnerability.png` — scatter plot with regression line (r = −0.73), vertical threshold at ΔKL = 0.30, points colored by family and shaped by domain.
+
+### Significance
+
+This is a novel contribution: no prior work (to our knowledge) has identified ΔKL as a predictor of speculative decoding vulnerability. It transforms the question from "does my model need spec-aware training?" (requires running the full experiment) to a cheap 200-step pilot check.

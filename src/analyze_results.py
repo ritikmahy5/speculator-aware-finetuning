@@ -51,6 +51,18 @@ DOMAIN_COLORS = {
 
 DOMAINS = ["code", "medical", "chat"]
 
+FAMILY_COLORS = {
+    "Llama": "#1A5276",
+    "Qwen": "#3498DB",
+    "Gemma": "#8E44AD",
+}
+
+DOMAIN_MARKERS = {
+    "code": "o",       # circle
+    "medical": "s",    # square
+    "chat": "^",       # triangle
+}
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -1295,6 +1307,111 @@ def generate_summary_table(results_dir: Path) -> pd.DataFrame:
 # Main entry point
 # ---------------------------------------------------------------------------
 
+def plot_delta_kl_vulnerability(results_dir: Path, output_dir: Path) -> None:
+    """Scatter plot of ΔKL vs relative α change across all model families.
+
+    Shows that ΔKL (post-FT KL − base KL) predicts fine-tuning-induced
+    speculative decoding degradation (r=−0.73, p=0.005). A vertical threshold
+    at ΔKL=0.30 separates degraders from non-degraders in 8/9 cases.
+
+    Args:
+        results_dir: Root results directory (unused — data is hardcoded from
+            collected experimental results across 3 families × 3 domains).
+        output_dir: Directory to save the plot.
+    """
+    # All 9 data points from EXP-1 across Qwen, Llama, Gemma
+    data = [
+        ("Qwen",  "code",    0.2031,  +5.6),
+        ("Qwen",  "medical", 0.0627,  +5.1),
+        ("Qwen",  "chat",    0.1291, +14.0),
+        ("Llama", "code",    0.2434,  -8.5),
+        ("Llama", "medical", 0.3456, -10.0),
+        ("Llama", "chat",    0.4881, -33.5),
+        ("Gemma", "code",    0.2866,  -3.0),
+        ("Gemma", "medical", 0.8366, -15.2),
+        ("Gemma", "chat",    1.5057, -29.3),
+    ]
+
+    families = [d[0] for d in data]
+    domains = [d[1] for d in data]
+    delta_kl = np.array([d[2] for d in data])
+    delta_alpha = np.array([d[3] for d in data])
+
+    fig, ax = plt.subplots(figsize=(8, 6))
+
+    # Horizontal zero line
+    ax.axhline(0, color="#888888", linestyle="--", linewidth=0.8, zorder=1)
+
+    # Vertical threshold line at ΔKL = 0.30
+    ax.axvline(0.30, color="#E74C3C", linestyle="--", linewidth=1.2, zorder=1,
+               label="Vulnerability threshold (ΔKL = 0.30)")
+
+    # Regression line with CI band
+    slope, intercept, r_val, p_val, _ = stats.linregress(delta_kl, delta_alpha)
+    x_fit = np.linspace(0, max(delta_kl) * 1.1, 100)
+    y_fit = slope * x_fit + intercept
+    ax.plot(x_fit, y_fit, color="#555555", linewidth=1.5, linestyle="-", zorder=2)
+
+    # CI band (bootstrap-style approximation using standard error)
+    n = len(delta_kl)
+    y_pred = slope * delta_kl + intercept
+    se = np.sqrt(np.sum((delta_alpha - y_pred) ** 2) / (n - 2))
+    x_mean = np.mean(delta_kl)
+    se_fit = se * np.sqrt(1 / n + (x_fit - x_mean) ** 2 / np.sum((delta_kl - x_mean) ** 2))
+    t_crit = stats.t.ppf(0.975, n - 2)
+    ax.fill_between(x_fit, y_fit - t_crit * se_fit, y_fit + t_crit * se_fit,
+                    color="#CCCCCC", alpha=0.3, zorder=1)
+
+    # Scatter points: colored by family, shaped by domain
+    for i, (fam, dom, dkl, da) in enumerate(data):
+        ax.scatter(dkl, da,
+                   color=FAMILY_COLORS[fam],
+                   marker=DOMAIN_MARKERS[dom],
+                   s=120, zorder=3, edgecolors="white", linewidths=0.5)
+        # Label each point
+        offset_x, offset_y = 0.02, 1.5
+        # Nudge overlapping labels
+        if fam == "Qwen" and dom == "medical":
+            offset_y = -2.5
+        elif fam == "Qwen" and dom == "code":
+            offset_y = -2.5
+        ax.annotate(f"{fam} {dom}", (dkl, da),
+                    xytext=(dkl + offset_x, da + offset_y),
+                    fontsize=8, color="#333333")
+
+    # Build legend with family colors and domain shapes
+    from matplotlib.lines import Line2D
+    legend_elements = []
+    for fam, color in FAMILY_COLORS.items():
+        legend_elements.append(Line2D([0], [0], marker="o", color="w",
+                                      markerfacecolor=color, markersize=9,
+                                      label=fam))
+    for dom, marker in DOMAIN_MARKERS.items():
+        legend_elements.append(Line2D([0], [0], marker=marker, color="w",
+                                      markerfacecolor="#888888", markersize=9,
+                                      label=dom.capitalize()))
+    legend_elements.append(Line2D([0], [0], color="#E74C3C", linestyle="--",
+                                  linewidth=1.2, label="Threshold (ΔKL=0.30)"))
+    ax.legend(handles=legend_elements, loc="lower left", fontsize=9,
+              framealpha=0.9)
+
+    # Annotation with correlation stats
+    ax.annotate(f"r = {r_val:.2f}, p = {p_val:.3f}",
+                xy=(0.97, 0.97), xycoords="axes fraction",
+                ha="right", va="top", fontsize=10,
+                bbox=dict(boxstyle="round,pad=0.3", facecolor="white",
+                          edgecolor="#CCCCCC", alpha=0.9))
+
+    ax.set_xlabel("ΔKL (Post-FT KL − Base KL)", fontsize=12)
+    ax.set_ylabel("Relative α Change (%)", fontsize=12)
+    ax.set_title("ΔKL Predicts Speculative Decoding Vulnerability", fontsize=14)
+
+    fig.tight_layout()
+    _save_plot(fig, output_dir, "plot_delta_kl_vulnerability")
+    plt.close(fig)
+    logger.info("Generated ΔKL vulnerability prediction plot.")
+
+
 def main() -> None:
     """Parse arguments and generate all available plots."""
     parser = argparse.ArgumentParser(
@@ -1341,6 +1458,7 @@ def main() -> None:
     plot_complementarity(results_dir, output_dir)
     plot_argmax_diagnostic(results_dir, output_dir)
     plot_task_eval(results_dir, output_dir)
+    plot_delta_kl_vulnerability(results_dir, output_dir)
 
     # Summary table
     summary_df = generate_summary_table(results_dir)

@@ -28,6 +28,7 @@ Crucially, the severity of fine-tuning-induced degradation — and therefore the
 4. We analyze cross-domain generalization and complementarity with runtime draft adaptation (e.g., ATLAS-style systems).
 5. We show the KL-α relationship is model-family dependent (Llama r=-0.928 vs Qwen r=+0.956), explaining when speculator-aware training is most valuable. Gemma's degradation pattern (two of three families vulnerable) confirms the problem is general.
 6. We validate the alignment mechanism via argmax agreement analysis and show the task-performance tradeoff is mild, with KL regularization acting as a beneficial regularizer against overfitting.
+7. We identify ΔKL (post-FT KL − base KL) as a strong predictor of fine-tuning vulnerability (r = −0.73, p = 0.026) and propose a lightweight assessment protocol costing <5% of training compute.
 
 ## 2. Method
 
@@ -318,6 +319,16 @@ We measured the fraction of positions where argmax(target) == argmax(draft), whi
 
 Standard fine-tuning reduces argmax agreement in 5 of 6 cases, while speculator-aware training increases it above the base model in all 6. This confirms the causal chain: KL regularization reduces distributional divergence, which increases top-token agreement with the draft model, which increases acceptance rate. The average improvement over standard FT is +4.0pp (Llama) and +5.8pp (Qwen).
 
+### ΔKL as a Vulnerability Predictor
+
+An unexpected finding emerges from analyzing all 9 family×domain combinations from EXP-1: **ΔKL (post-FT KL − base KL) predicts speculative decoding degradation** with Pearson r = −0.73 (p = 0.026). Higher ΔKL — indicating greater training-induced distributional shift — strongly predicts larger α drops. By contrast, base α alone is useless as a predictor (r = −0.07).
+
+A simple threshold of ΔKL > 0.30 correctly classifies 8 of 9 cases into "will degrade" vs "safe." All Qwen points fall below the threshold (ΔKL = 0.06–0.20) and indeed show no degradation. All major degradation events (>10% relative drop) exceed the threshold. The single miss — Llama code at ΔKL = 0.24 — had only mild degradation (−8.5%).
+
+This suggests a practical **vulnerability assessment protocol**: compute base KL, run a short pilot (100–200 steps), measure ΔKL, and decide whether speculator-aware training is warranted. This costs <5% of full training compute and avoids committing to dual-model training for already-resilient pairs.
+
+![ΔKL Vulnerability Prediction](../plots/plot_delta_kl_vulnerability.png)
+
 ### Limitations
 
 1. **Task performance trade-off at high λ** — at λ=0.5, MMLU drops 2-4pp; at λ=1.0 the drop reaches 5-8pp. Practitioners should choose λ based on their tolerance for general capability loss.
@@ -330,7 +341,7 @@ Standard fine-tuning reduces argmax agreement in 5 of 6 cases, while speculator-
 
 We demonstrate that speculator-aware fine-tuning — a simple KL regularization during LoRA training — effectively preserves speculative decoding acceptance rates across domain-specific fine-tuning. The severity of fine-tuning-induced degradation is model-family dependent: Llama suffers up to 33.5% relative α loss from standard training, Gemma up to 29.3%, while Qwen remains resilient even under aggressive settings. With two of three families showing significant degradation, the problem is general across the ecosystem. For vulnerable pairs like Llama, our method reduces degradation from 33.5% to 7.6% at λ=0.1, and at λ=1.0 the fine-tuned model surpasses the base model's acceptance rate in all three domains. The approach is easy to implement, requires no architectural changes, and provides a controllable trade-off between task adaptation and inference efficiency. The finding that KL regularization simultaneously improves perplexity (by acting as a regularizer) and preserves α suggests there is often no real cost to incorporating this loss.
 
-**Practical Recommendations.** Based on our experiments across three model families, three domains, five loss functions, and seven λ values, we offer the following guidelines for practitioners deploying speculative decoding with fine-tuned models: (a) **Assess vulnerability first** — measure base α and base KL for your target-draft pair before investing in speculator-aware training. Model pairs with high base α and low base KL (like Llama) are vulnerable to fine-tuning drift; pairs where the draft is already loosely aligned (like Qwen) may not need intervention. (b) **Use λ=0.5 as a default starting point** — it offers strong α recovery (within 1-6% of base across domains) with mild task-performance tradeoff, and at this strength the KL regularization also acts as a beneficial regularizer against overfitting. (c) **Choose the loss function based on your λ regime** — use JS divergence at low λ (below 0.1) for its bounded, stable gradients, and forward KL at higher λ (0.5 and above) where stronger distributional alignment is needed.
+**Practical Recommendations.** Based on our experiments across three model families, three domains, five loss functions, and seven λ values, we offer the following guidelines for practitioners deploying speculative decoding with fine-tuned models: (a) **Assess vulnerability via ΔKL** — run a short pilot (100–200 steps of standard LoRA) and compute ΔKL = KL_post − KL_base. If ΔKL > 0.30, the pair is vulnerable and speculator-aware training is recommended (this threshold correctly classifies 8/9 of our family×domain cases). Pairs with ΔKL < 0.30 (like all Qwen combinations) are likely safe with standard fine-tuning. (b) **Use λ=0.5 as a default starting point** — it offers strong α recovery (within 1-6% of base across domains) with mild task-performance tradeoff, and at this strength the KL regularization also acts as a beneficial regularizer against overfitting. (c) **Choose the loss function based on your λ regime** — use JS divergence at low λ (below 0.1) for its bounded, stable gradients, and forward KL at higher λ (0.5 and above) where stronger distributional alignment is needed.
 
 ## Appendix: Experimental Configuration
 

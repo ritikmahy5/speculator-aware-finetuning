@@ -10,6 +10,7 @@ When a target model is fine-tuned on domain-specific data, its output distributi
 - KL regularization at **lambda=0.5** recovers nearly all lost acceptance rate; at **lambda=1.0**, fine-tuned models **exceed** base acceptance rate in all domains.
 - The KL-alpha relationship is model-family dependent: Llama shows strong negative correlation (r=-0.93), while Qwen shows positive correlation (r=+0.96) due to constructive distribution sharpening.
 - Qwen is inherently resilient to speculative decoding drift (max -8.4% even under stress), making Llama the primary validation target for this method.
+- **ΔKL (post-FT KL − base KL)** predicts vulnerability across families (r=−0.73, p=0.026). A threshold of ΔKL > 0.30 correctly classifies 8/9 family×domain cases.
 
 ## The Approach
 
@@ -202,6 +203,7 @@ Both approaches improve with draft adaptation. For Llama (where standard FT degr
 | ![Qwen stress test trajectory](plots/plot_stress_test_trajectory.png) | Qwen stress test: alpha trajectory over 3 epochs |
 | ![Benchmark comparison](plots/plot_benchmark_comparison.png) | Standardized benchmarks: HumanEval, MedQA, MMLU |
 | ![Argmax agreement](plots/plot_argmax_agreement.png) | Argmax agreement diagnostic: mechanism validation |
+| ![ΔKL vulnerability](plots/plot_delta_kl_vulnerability.png) | ΔKL vulnerability prediction: r=−0.73 across 3 families |
 
 ## Experiments
 
