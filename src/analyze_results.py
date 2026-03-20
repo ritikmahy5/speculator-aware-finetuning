@@ -1469,6 +1469,282 @@ def plot_dpo_comparison(results_dir: Path, output_dir: Path) -> None:
     logger.info("DPO comparison plot saved to %s", output_dir / "plot_dpo_comparison.png")
 
 
+def plot_joint_vs_frozen(results_dir: Path, output_dir: Path) -> None:
+    """Generate grouped bar chart comparing α across training paradigms per domain.
+
+    Compares base model, standard fine-tuned, speculator-aware (frozen draft,
+    best λ from EXP-4), joint KL (EXP-8), and joint proxy (EXP-9) acceptance
+    rates for each domain.
+
+    Data sources:
+        - Base: ``results/exp1/acceptance_base_{domain}.json``
+        - Standard FT: ``results/exp1/acceptance_{domain}_baseline_eval_{domain}.json``
+        - Spec-aware frozen: best α from ``results/exp4/{domain}_lam_*/acceptance_{domain}.json``
+        - Joint KL (EXP-8): ``results/exp8_joint_{domain}*/acceptance_{domain}.json``
+        - Joint proxy (EXP-9): ``results/exp9_overlap_{domain}*/acceptance_{domain}.json``
+
+    Skips gracefully if no EXP-8 or EXP-9 result directories exist.
+
+    Args:
+        results_dir: Root results directory.
+        output_dir: Directory to write plot files.
+    """
+    # Check for EXP-8 and EXP-9 directories before proceeding
+    exp8_dirs = list(results_dir.glob("exp8_joint_*"))
+    exp9_dirs = list(results_dir.glob("exp9_overlap_*"))
+    if not exp8_dirs and not exp9_dirs:
+        logger.info(
+            "Skipping plot_joint_vs_frozen: no exp8_joint_* or exp9_overlap_* directories found."
+        )
+        return
+
+    exp1_dir = results_dir / "exp1"
+    exp4_dir = results_dir / "exp4"
+
+    paradigm_labels = ["Base", "Standard FT", "Spec-Aware\n(Frozen)", "Joint KL\n(EXP-8)", "Joint Proxy\n(EXP-9)"]
+    paradigm_colors = {
+        "Base": "#1A5276",
+        "Standard FT": "#E74C3C",
+        "Spec-Aware\n(Frozen)": "#3498DB",
+        "Joint KL\n(EXP-8)": "#27AE60",
+        "Joint Proxy\n(EXP-9)": "#8E44AD",
+    }
+
+    # Collect data per domain per paradigm
+    domain_data: dict[str, dict[str, tuple[float, float]]] = {}
+
+    for domain in DOMAINS:
+        row: dict[str, tuple[float, float]] = {}
+
+        # --- Base model ---
+        base_data = _load_json(exp1_dir / f"acceptance_base_{domain}.json")
+        if base_data is None:
+            consolidated = _load_json(exp1_dir / "acceptance_base.json")
+            if consolidated is not None and isinstance(consolidated, dict):
+                base_data = consolidated.get(domain)
+        if base_data is not None:
+            row["Base"] = (
+                base_data.get("mean_alpha", base_data.get("alpha", 0.0)),
+                base_data.get("std_alpha", base_data.get("alpha_std", 0.0)),
+            )
+
+        # --- Standard FT ---
+        ft_data = _load_json(exp1_dir / f"acceptance_{domain}_baseline_eval_{domain}.json")
+        if ft_data is None:
+            ft_data = _load_json(exp1_dir / f"acceptance_{domain}_baseline.json")
+        if ft_data is not None:
+            row["Standard FT"] = (
+                ft_data.get("mean_alpha", ft_data.get("alpha", 0.0)),
+                ft_data.get("std_alpha", ft_data.get("alpha_std", 0.0)),
+            )
+
+        # --- Spec-aware frozen: find best α across EXP-4 lambda dirs ---
+        if exp4_dir.exists():
+            best_alpha = -1.0
+            best_std = 0.0
+            for lam_dir in exp4_dir.glob(f"{domain}_lam_*"):
+                acc_path = lam_dir / f"acceptance_{domain}.json"
+                data = _load_json(acc_path)
+                if data is None:
+                    # Try generic acceptance file
+                    data = _load_json(lam_dir / "acceptance.json")
+                if data is not None:
+                    alpha_val = data.get("mean_alpha", data.get("alpha", -1.0))
+                    if alpha_val > best_alpha:
+                        best_alpha = alpha_val
+                        best_std = data.get("std_alpha", data.get("alpha_std", 0.0))
+            if best_alpha >= 0:
+                row["Spec-Aware\n(Frozen)"] = (best_alpha, best_std)
+
+        # --- Joint KL (EXP-8) ---
+        for exp8_dir in sorted(results_dir.glob(f"exp8_joint_{domain}*")):
+            data = _load_json(exp8_dir / f"acceptance_{domain}.json")
+            if data is None:
+                data = _load_json(exp8_dir / "acceptance.json")
+            if data is not None:
+                row["Joint KL\n(EXP-8)"] = (
+                    data.get("mean_alpha", data.get("alpha", 0.0)),
+                    data.get("std_alpha", data.get("alpha_std", 0.0)),
+                )
+                break  # Use first match
+
+        # --- Joint proxy (EXP-9) ---
+        for exp9_dir in sorted(results_dir.glob(f"exp9_overlap_{domain}*")):
+            data = _load_json(exp9_dir / f"acceptance_{domain}.json")
+            if data is None:
+                data = _load_json(exp9_dir / "acceptance.json")
+            if data is not None:
+                row["Joint Proxy\n(EXP-9)"] = (
+                    data.get("mean_alpha", data.get("alpha", 0.0)),
+                    data.get("std_alpha", data.get("alpha_std", 0.0)),
+                )
+                break  # Use first match
+
+        if row:
+            domain_data[domain] = row
+
+    if not domain_data:
+        logger.info("Skipping plot_joint_vs_frozen: no data could be loaded for any domain.")
+        return
+
+    # Determine which paradigms actually have data
+    present_paradigms = [p for p in paradigm_labels if any(p in domain_data.get(d, {}) for d in DOMAINS)]
+    if not present_paradigms:
+        logger.info("Skipping plot_joint_vs_frozen: no paradigm data available.")
+        return
+
+    n_domains = len(domain_data)
+    n_paradigms = len(present_paradigms)
+    x = np.arange(n_domains)
+    width = 0.8 / n_paradigms
+    offsets = np.linspace(-(n_paradigms - 1) / 2, (n_paradigms - 1) / 2, n_paradigms) * width
+
+    fig, ax = plt.subplots(figsize=(max(8, n_domains * 2.5), 5))
+
+    for i, paradigm in enumerate(present_paradigms):
+        alphas_plot = []
+        stds_plot = []
+        domains_ordered = [d for d in DOMAINS if d in domain_data]
+        for domain in domains_ordered:
+            val = domain_data[domain].get(paradigm, (0.0, 0.0))
+            alphas_plot.append(val[0])
+            stds_plot.append(val[1])
+        bars = ax.bar(
+            x + offsets[i],
+            alphas_plot,
+            width,
+            yerr=stds_plot,
+            capsize=4,
+            label=paradigm.replace("\n", " "),
+            color=paradigm_colors[paradigm],
+        )
+        # Add value labels above each bar
+        for bar, alpha_val in zip(bars, alphas_plot):
+            if alpha_val > 0:
+                ax.text(
+                    bar.get_x() + bar.get_width() / 2.0,
+                    bar.get_height() + 0.01,
+                    f"{alpha_val:.2f}",
+                    ha="center",
+                    va="bottom",
+                    fontsize=8,
+                )
+
+    domains_ordered = [d for d in DOMAINS if d in domain_data]
+    ax.set_xlabel("Domain")
+    ax.set_ylabel("Acceptance Rate (α)")
+    ax.set_title("Acceptance Rate by Training Paradigm and Domain")
+    ax.set_xticks(x)
+    ax.set_xticklabels([d.capitalize() for d in domains_ordered])
+    ax.set_ylim(0, 1.1)
+    ax.legend(loc="upper right", fontsize=9)
+    ax.yaxis.grid(True, alpha=0.3)
+    ax.set_axisbelow(True)
+
+    _save_plot(fig, output_dir, "plot_joint_vs_frozen")
+
+
+def plot_draft_training_trajectory(results_dir: Path, output_dir: Path) -> None:
+    """Generate dual-axis line chart of draft loss and acceptance proxy over EXP-8 training.
+
+    Reads ``training_metrics.json`` from the first matching ``exp8_joint_*``
+    directory. Plots draft_loss and task_loss on the left y-axis, and
+    acceptance_proxy on the right y-axis, against training step.
+
+    Skips gracefully if no EXP-8 directories with training_metrics.json exist.
+
+    Args:
+        results_dir: Root results directory.
+        output_dir: Directory to write plot files.
+    """
+    # Find the first exp8 directory that has training_metrics.json
+    metrics_path: Path | None = None
+    for exp8_dir in sorted(results_dir.glob("exp8_joint_*")):
+        candidate = exp8_dir / "training_metrics.json"
+        if candidate.exists():
+            metrics_path = candidate
+            break
+
+    if metrics_path is None:
+        logger.info(
+            "Skipping plot_draft_training_trajectory: no exp8_joint_*/training_metrics.json found."
+        )
+        return
+
+    raw = _load_json(metrics_path)
+    if raw is None or not isinstance(raw, list) or len(raw) == 0:
+        logger.info(
+            "Skipping plot_draft_training_trajectory: training_metrics.json is empty or unparseable."
+        )
+        return
+
+    steps: list[int] = []
+    task_losses: list[float] = []
+    draft_losses: list[float] = []
+    acceptance_proxies: list[float] = []
+
+    for entry in raw:
+        if not isinstance(entry, dict):
+            continue
+        step = entry.get("step")
+        if step is None:
+            continue
+        steps.append(int(step))
+        task_losses.append(float(entry.get("task_loss", float("nan"))))
+        draft_losses.append(float(entry.get("draft_loss", float("nan"))))
+        acceptance_proxies.append(float(entry.get("acceptance_proxy", float("nan"))))
+
+    if not steps:
+        logger.info("Skipping plot_draft_training_trajectory: no valid step entries in metrics.")
+        return
+
+    steps_arr = np.array(steps)
+    task_arr = np.array(task_losses)
+    draft_arr = np.array(draft_losses)
+    proxy_arr = np.array(acceptance_proxies)
+
+    fig, ax_left = plt.subplots(figsize=(9, 5))
+    ax_right = ax_left.twinx()
+
+    # --- Left axis: losses ---
+    line_draft, = ax_left.plot(
+        steps_arr, draft_arr,
+        color="#E74C3C", linewidth=2, label="Draft Loss",
+    )
+    line_task, = ax_left.plot(
+        steps_arr, task_arr,
+        color="#E74C3C", linewidth=1.5, linestyle="--", alpha=0.5, label="Task Loss",
+    )
+
+    # --- Right axis: acceptance proxy ---
+    line_proxy, = ax_right.plot(
+        steps_arr, proxy_arr,
+        color="#3498DB", linewidth=2, label="Acceptance Proxy",
+    )
+
+    ax_left.set_xlabel("Training Step")
+    ax_left.set_ylabel("Loss", color="#E74C3C")
+    ax_left.tick_params(axis="y", labelcolor="#E74C3C")
+
+    ax_right.set_ylabel("Acceptance Proxy (α)", color="#3498DB")
+    ax_right.tick_params(axis="y", labelcolor="#3498DB")
+    ax_right.set_ylim(0, 1.05)
+
+    ax_left.set_title("EXP-8 Joint Training: Draft Loss & Acceptance Proxy over Steps")
+
+    # Combined legend
+    lines = [line_draft, line_task, line_proxy]
+    labels = [l.get_label() for l in lines]
+    ax_left.legend(lines, labels, loc="upper right")
+
+    # Grid only on left axis to avoid double grid
+    ax_left.yaxis.grid(True, alpha=0.3)
+    ax_right.yaxis.grid(False)
+    ax_left.set_axisbelow(True)
+
+    _save_plot(fig, output_dir, "plot_draft_training_trajectory")
+
+
 def main() -> None:
     """Parse arguments and generate all available plots."""
     parser = argparse.ArgumentParser(
@@ -1517,6 +1793,8 @@ def main() -> None:
     plot_task_eval(results_dir, output_dir)
     plot_delta_kl_vulnerability(results_dir, output_dir)
     plot_dpo_comparison(results_dir, output_dir)
+    plot_joint_vs_frozen(results_dir, output_dir)
+    plot_draft_training_trajectory(results_dir, output_dir)
 
     # Summary table
     summary_df = generate_summary_table(results_dir)
