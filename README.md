@@ -7,7 +7,7 @@ When a target model is fine-tuned on domain-specific data, its output distributi
 ## TL;DR
 
 - Standard LoRA fine-tuning degrades Llama speculative decoding acceptance rate by up to **33.5%** (chat domain).
-- KL regularization at **lambda=0.5** recovers nearly all lost acceptance rate; at **lambda=1.0**, fine-tuned models **exceed** base acceptance rate in all domains.
+- KL regularization at **lambda=0.5** recovers nearly all lost acceptance rate; at **lambda=1.0**, fine-tuned models **exceed** base acceptance rate in all domains for both Llama and Gemma.
 - The KL-alpha relationship is model-family dependent: Llama shows strong negative correlation (r=-0.93), while Qwen shows positive correlation (r=+0.96) due to constructive distribution sharpening.
 - Qwen is inherently resilient to speculative decoding drift (max -8.4% even under stress), making Llama the primary validation target for this method.
 - **ΔKL (post-FT KL − base KL)** predicts vulnerability across families (r=−0.73, p=0.026). A threshold of ΔKL > 0.30 correctly classifies 8/9 family×domain cases.
@@ -67,6 +67,16 @@ Our core result — spec-aware training dramatically reduces chat degradation:
 
 Chat degradation reduced from **-33.5% to -7.6%** — recovering most of the lost acceptance rate with a single regularization term.
 
+### EXP-3: Speculator-Aware Fine-Tuning (Gemma, λ=0.1)
+
+| Domain | Base α | Standard FT α | Spec-Aware α (λ=0.1) |
+|--------|--------|--------------|----------------------|
+| Code | 0.6247 | 0.6056 (−3.0%) | **0.6267** (+0.3%) |
+| Medical | 0.3976 | 0.3372 (−15.2%) | 0.3047 (−23.4%) |
+| Chat | 0.3984 | 0.2815 (−29.3%) | 0.3164 (−20.6%) |
+
+Gemma code recovers at λ=0.1, but medical/chat need stronger regularization (see EXP-4).
+
 ### EXP-4: Lambda Sweep (Qwen)
 
 Higher λ monotonically increases α but trades off task loss. Results across domains:
@@ -86,6 +96,16 @@ Llama models show larger degradation from standard FT, making the recovery more 
 | Code | 0.5954 | 0.5449 | 0.5596 | 0.5881 | **0.6158** (+3.4%) |
 | Medical | 0.4163 | 0.3747 | 0.3952 | 0.3925 | **0.4320** (+3.8%) |
 | Chat | 0.3784 | 0.2517 | 0.2624 | 0.3554 | **0.4063** (+7.4%) |
+
+### EXP-4: Lambda Sweep (Gemma)
+
+Gemma confirms the pattern — at λ=1.0, **all domains exceed base α**, validating cross-family generalization:
+
+| Domain | Base α | Std FT α | λ=0.1 α | λ=0.5 α | λ=1.0 α |
+|--------|--------|----------|---------|---------|---------|
+| Code | 0.6247 | 0.6056 | 0.6267 | 0.6832 | **0.6974** (+11.6%) |
+| Medical | 0.3976 | 0.3372 | 0.3047 | 0.3974 | **0.4348** (+9.4%) |
+| Chat | 0.3984 | 0.2815 | 0.3164 | 0.3984 | **0.4089** (+2.6%) |
 
 ### EXP-2: KL-Acceptance Rate Correlation (Both Families)
 
@@ -191,6 +211,8 @@ Both approaches improve with draft adaptation. For Llama (where standard FT degr
 
 We extend spec-aware regularization to DPO alignment training: L_total = L_DPO + λ × KL(p_target || p_draft).
 
+**Chat domain (training domain):**
+
 | Condition | α | Relative Δα |
 |-----------|---|-------------|
 | Base (no FT) | 0.369 | — |
@@ -198,7 +220,16 @@ We extend spec-aware regularization to DPO alignment training: L_total = L_DPO +
 | Spec-aware DPO (λ=0.1) | 0.383 | +3.7% |
 | Spec-aware DPO (λ=0.5) | 0.367 | −0.6% |
 
-Standard DPO barely affects acceptance rate (+0.5%), unlike SFT where Llama chat degraded by 33.5%. Spec-aware DPO at λ=0.1 provides a modest boost (+3.7%), but λ=0.5 slightly hurts (−0.6%), suggesting the DPO objective already provides sufficient implicit regularization. This confirms spec-aware regularization is most critical for SFT scenarios with significant domain shift.
+**Cross-domain evaluation (DPO trained on chat, evaluated on code/medical):**
+
+| Condition | Code α | Medical α | Chat α |
+|-----------|--------|-----------|--------|
+| Base (no FT) | 0.5954 | 0.4163 | 0.3693 |
+| Standard DPO (λ=0.0) | 0.5859 (−1.6%) | 0.4075 (−2.1%) | 0.3710 (+0.5%) |
+| Spec-aware DPO (λ=0.1) | 0.5848 (−1.8%) | 0.4087 (−1.8%) | 0.3828 (+3.7%) |
+| Spec-aware DPO (λ=0.5) | 0.5884 (−1.2%) | 0.4106 (−1.4%) | 0.3671 (−0.6%) |
+
+DPO barely affects acceptance rate across **all** domains (max −2.1%), unlike SFT where Llama chat degraded by 33.5% and code by 8.5%. This confirms DPO's distributional shift is minimal regardless of evaluation domain, and spec-aware regularization is most critical for SFT scenarios.
 
 ## Plots
 
@@ -226,8 +257,8 @@ Standard DPO barely affects acceptance rate (+0.5%), unlike SFT where Llama chat
 |---|-----------|------|-------|-------|
 | 1 | Baseline degradation measurement | Done | Done | Done |
 | 2 | KL–acceptance rate correlation | Done | Done | — |
-| 3 | Speculator-aware fine-tuning (core) | Done | Done | — |
-| 4 | Lambda sweep + Pareto analysis | Done | Done | — |
+| 3 | Speculator-aware fine-tuning (core) | Done | Done | Done |
+| 4 | Lambda sweep + Pareto analysis | Done | Done | Done |
 | 5 | Cross-domain analysis | Done | — | — |
 | 6 | Loss function ablation | Done | Done | — |
 | 7 | Complementarity with runtime adaptation | Done | — | — |

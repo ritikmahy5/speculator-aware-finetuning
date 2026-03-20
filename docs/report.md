@@ -23,7 +23,7 @@ Crucially, the severity of fine-tuning-induced degradation — and therefore the
 ### Contributions
 
 1. We quantify the degradation of speculative decoding acceptance rates from standard LoRA fine-tuning across three domains (code, medical, chat) and three model families, finding up to 33.5% relative degradation with Llama and 29.3% with Gemma.
-2. We propose speculator-aware fine-tuning with KL regularization and demonstrate it reduces acceptance rate degradation from 33.5% to 7.6% at λ=0.1, with higher λ values fully recovering or exceeding base performance.
+2. We propose speculator-aware fine-tuning with KL regularization and demonstrate it reduces acceptance rate degradation from 33.5% to 7.6% at λ=0.1, with higher λ values fully recovering or exceeding base performance. We validate this across two vulnerable families (Llama and Gemma), with both exceeding base α at λ=1.0 in all domains.
 3. We evaluate five divergence measures as regularization losses, finding JS divergence marginally outperforms forward KL.
 4. We analyze cross-domain generalization and complementarity with runtime draft adaptation (e.g., ATLAS-style systems).
 5. We show the KL-α relationship is model-family dependent (Llama r=-0.928 vs Qwen r=+0.956), explaining when speculator-aware training is most valuable. Gemma's degradation pattern (two of three families vulnerable) confirms the problem is general.
@@ -132,6 +132,16 @@ With the KL-α relationship validated for Llama (and the understanding that Qwen
 
 The chat domain shows the most dramatic improvement: degradation reduced from 33.5% to 7.6%, recovering most of the lost acceptance rate. Code also benefits. Medical does not improve because the adapter was trained on code data — the spec-aware loss preserves alignment for code-like outputs but cannot help with unrelated domains.
 
+**Gemma-2-9B + Gemma-2-2B (EXP-3, λ=0.1):**
+
+| Domain | Base α | Standard FT α | Spec-Aware α (λ=0.1) |
+|--------|--------|--------------|----------------------|
+| Code | 0.6247 | 0.6056 (−3.0%) | **0.6267** (+0.3%) |
+| Medical | 0.3976 | 0.3372 (−15.2%) | 0.3047 (−23.4%) |
+| Chat | 0.3984 | 0.2815 (−29.3%) | 0.3164 (−20.6%) |
+
+At λ=0.1, Gemma code fully recovers but medical and chat still degrade substantially. Gemma's larger KL shifts (chat: 0.48→1.99) overwhelm the weak regularization, indicating this family requires higher λ values — confirmed in EXP-4 below.
+
 ### 3.4 Lambda Sweep and Pareto Analysis (EXP-4)
 
 The λ=0.1 result is encouraging but leaves room for improvement, particularly on chat. How does α respond across the full range of regularization strengths? We swept λ from 0.01 to 1.0 for each domain.
@@ -172,6 +182,22 @@ The λ=0.1 result is encouraging but leaves room for improvement, particularly o
 At λ=1.0, the fine-tuned model **exceeds the base model's acceptance rate in all three domains** — code (+3.4%), medical (+3.8%), and chat (+7.4%). Chat shows the most dramatic recovery: standard fine-tuning degrades α by 33.5%, but at λ=1.0 the model surpasses the base by 7.4%. The medical domain shows a non-monotonic pattern at mid-range λ values but converges to strong improvement at λ=1.0.
 
 **Qwen results** show the same monotonic trend across all three domains (code, medical, chat), with medical showing the largest absolute gains at high λ.
+
+**Gemma-2-9B Lambda Sweep:**
+
+| Domain | λ | α | KL | vs Base α |
+|--------|---|---|-----|-----------|
+| Code | 0.10 | 0.6267 | 0.6474 | +0.3% |
+| Code | 0.50 | 0.6832 | 0.3216 | +9.4% |
+| Code | 1.00 | **0.6974** | 0.2420 | **+11.6%** |
+| Medical | 0.10 | 0.3047 | 1.0516 | −23.4% |
+| Medical | 0.50 | 0.3974 | 0.5345 | −0.1% |
+| Medical | 1.00 | **0.4348** | 0.3617 | **+9.4%** |
+| Chat | 0.10 | 0.3164 | 1.2695 | −20.6% |
+| Chat | 0.50 | 0.3984 | 0.5119 | +0.0% |
+| Chat | 1.00 | **0.4089** | 0.3555 | **+2.6%** |
+
+Gemma follows the same pattern as Llama: α increases monotonically with λ, and at λ=1.0 all three domains exceed base α. Gemma requires λ≥0.5 to reach base-level performance on medical and chat, consistent with its larger KL shifts. At λ=1.0, Gemma's code improvement (+11.6%) exceeds Llama's (+3.4%), while Llama's chat recovery is stronger (+7.4% vs +2.6%). With two of three families now validated through the full EXP-3/4 pipeline, the speculator-aware approach generalizes beyond a single model pair.
 
 ### 3.5 Cross-Domain Analysis (EXP-5)
 
@@ -348,7 +374,18 @@ This finding is consistent with the ΔKL vulnerability framework: DPO on in-doma
 | Spec-aware DPO (λ=0.1) | 0.3828 | ±0.103 | +3.7% |
 | Spec-aware DPO (λ=0.5) | 0.3671 | ±0.097 | −0.6% |
 
-At λ=0.1, spec-aware DPO provides a modest 3.7% relative improvement. At λ=0.5, the regularization slightly overshoots (−0.6%), suggesting the DPO objective's implicit KL constraint already provides most of the alignment needed. The overall picture is clear: DPO produces ΔKL well below the 0.30 vulnerability threshold, so speculator-aware regularization yields diminishing returns compared to SFT scenarios.
+At λ=0.1, spec-aware DPO provides a modest 3.7% relative improvement. At λ=0.5, the regularization slightly overshoots (−0.6%), suggesting the DPO objective's implicit KL constraint already provides most of the alignment needed.
+
+**Cross-domain evaluation** confirms this finding generalizes beyond the training domain. Measuring the chat-DPO models on code and medical prompts:
+
+| Condition | Code α | Medical α | Chat α |
+|-----------|--------|-----------|--------|
+| Base | 0.5954 | 0.4163 | 0.3693 |
+| Standard DPO | 0.5859 (−1.6%) | 0.4075 (−2.1%) | 0.3710 (+0.5%) |
+| Spec-aware DPO (λ=0.1) | 0.5848 (−1.8%) | 0.4087 (−1.8%) | 0.3828 (+3.7%) |
+| Spec-aware DPO (λ=0.5) | 0.5884 (−1.2%) | 0.4106 (−1.4%) | 0.3671 (−0.6%) |
+
+DPO's maximal degradation across all domains is just −2.1% (medical), compared to SFT's −33.5% (chat) and −8.5% (code). The overall picture is clear: DPO produces ΔKL well below the 0.30 vulnerability threshold, so speculator-aware regularization yields diminishing returns compared to SFT scenarios.
 
 ### Limitations
 

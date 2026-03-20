@@ -98,3 +98,13 @@ Argmax,Qwen,medical,spec_aware,,,,,,,,0.7467
 Argmax,Qwen,chat,base,,,,,,,,0.6493
 Argmax,Qwen,chat,std_ft,,,,,,,,0.6634
 Argmax,Qwen,chat,spec_aware,,,,,,,,0.7253
+DPO,Llama,chat,base,0.0,0.36931858722797,0.10156459361314774,,,,,,
+DPO,Llama,chat,dpo,0.0,0.3709781440343963,0.09623602032661438,,,,,,
+DPO,Llama,code,dpo,0.0,0.5859421734795613,0.15959972143173218,,,,,,
+DPO,Llama,medical,dpo,0.0,0.4075067024128686,0.09597300738096237,,,,,,
+DPO,Llama,chat,dpo_spec_aware,0.1,0.38283418553688825,0.10298547893762589,,,,,,
+DPO,Llama,code,dpo_spec_aware,0.1,0.5847761194029851,0.15939350426197052,,,,,,
+DPO,Llama,medical,dpo_spec_aware,0.1,0.40867562380038386,0.10052653402090073,,,,,,
+DPO,Llama,chat,dpo_spec_aware,0.5,0.3671164772727273,0.09661418199539185,,,,,,
+DPO,Llama,code,dpo_spec_aware,0.5,0.5884173739390913,0.15612180531024933,,,,,,
+DPO,Llama,medical,dpo_spec_aware,0.5,0.41059907834101383,0.07775206863880157,,,,,,
