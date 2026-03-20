@@ -18,6 +18,8 @@ from typing import Optional
 import torch
 import torch.nn.functional as F
 
+from src.acceptance_proxy_loss import compute_overlap_loss, compute_soft_accept_loss
+
 logger = logging.getLogger(__name__)
 
 EPSILON = 1e-10
@@ -389,6 +391,71 @@ def _compute_acceptance_proxy(
         return (total / count).item()
 
 
+def _overlap_proxy(
+    target_logits: torch.Tensor,
+    draft_logits: torch.Tensor,
+    attention_mask: torch.Tensor,
+    temperature: float,
+    top_k: Optional[int],
+) -> torch.Tensor:
+    """Wrapper for compute_overlap_loss matching the registry signature.
+
+    Maximizes top-k probability mass overlap between target and draft.
+    Logits are passed unshifted; the underlying function performs its own shift.
+
+    Args:
+        target_logits: (batch, seq_len, vocab_size) with gradients.
+        draft_logits: (batch, seq_len, vocab_size) detached.
+        attention_mask: (batch, seq_len) binary mask.
+        temperature: Softmax temperature.
+        top_k: Number of top draft tokens for overlap; defaults to 50 if None.
+
+    Returns:
+        Scalar overlap loss (negated overlap, so minimizing = maximizing overlap).
+    """
+    result = compute_overlap_loss(
+        target_logits=target_logits,
+        draft_logits=draft_logits,
+        attention_mask=attention_mask,
+        top_k=top_k or 50,
+        temperature=temperature,
+    )
+    return result["overlap_loss"]
+
+
+def _soft_accept_proxy(
+    target_logits: torch.Tensor,
+    draft_logits: torch.Tensor,
+    attention_mask: torch.Tensor,
+    temperature: float,
+    top_k: Optional[int],
+) -> torch.Tensor:
+    """Wrapper for compute_soft_accept_loss matching the registry signature.
+
+    Approximates acceptance probability via Gumbel-softmax draft samples.
+    Logits are passed unshifted; the underlying function performs its own shift.
+
+    Args:
+        target_logits: (batch, seq_len, vocab_size) with gradients.
+        draft_logits: (batch, seq_len, vocab_size) detached.
+        attention_mask: (batch, seq_len) binary mask.
+        temperature: Softmax temperature applied to logits before Gumbel sampling.
+        top_k: Unused for this loss type.
+
+    Returns:
+        Scalar soft acceptance loss (negated mean acceptance, so minimizing = maximizing).
+    """
+    result = compute_soft_accept_loss(
+        target_logits=target_logits,
+        draft_logits=draft_logits,
+        attention_mask=attention_mask,
+        tau=temperature,
+        num_samples=4,
+        temperature=1.0,
+    )
+    return result["accept_loss"]
+
+
 # Registry of loss functions
 _SPEC_LOSS_FNS = {
     "kl": _kl_divergence,
@@ -396,6 +463,8 @@ _SPEC_LOSS_FNS = {
     "js": _js_divergence,
     "tv": _tv_distance,
     "token_match": _token_match_loss,
+    "overlap": _overlap_proxy,
+    "soft_accept": _soft_accept_proxy,
 }
 
 
