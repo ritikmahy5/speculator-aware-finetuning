@@ -314,6 +314,42 @@ def save_checkpoint(model: Any, output_dir: str, step: int | None = None) -> str
     return save_dir
 
 
+def save_dual_checkpoint(
+    target_model: Any,
+    draft_model: Any,
+    output_dir: str,
+    step: int | None = None,
+) -> str:
+    """Save both target and draft LoRA adapters.
+
+    Args:
+        target_model: Target model with LoRA adapter.
+        draft_model: Draft model with LoRA adapter.
+        output_dir: Base output directory.
+        step: If provided, save to checkpoints/step_N/. Otherwise save to final/.
+
+    Returns:
+        Path to the checkpoint directory.
+    """
+    if step is not None:
+        ckpt_dir = os.path.join(output_dir, "checkpoints", f"step_{step}")
+    else:
+        ckpt_dir = os.path.join(output_dir, "final")
+
+    target_dir = os.path.join(ckpt_dir, "target_adapter")
+    draft_dir = os.path.join(ckpt_dir, "draft_adapter")
+
+    os.makedirs(target_dir, exist_ok=True)
+    os.makedirs(draft_dir, exist_ok=True)
+
+    target_model.save_pretrained(target_dir)
+    draft_model.save_pretrained(draft_dir)
+
+    logger = logging.getLogger("specaware")
+    logger.info(f"Saved dual checkpoint to {ckpt_dir}")
+    return ckpt_dir
+
+
 def save_metrics(
     metrics: list[dict],
     output_dir: str,
