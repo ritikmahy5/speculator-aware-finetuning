@@ -10,11 +10,12 @@
 #
 # SLURM settings (used when submitted via sbatch):
 #SBATCH --partition=gpu
+#SBATCH --account=cs7150.202630
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:h200:1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=128GB
-#SBATCH --time=12:00:00
+#SBATCH --time=08:00:00
 #SBATCH --job-name=exp8_joint
 #SBATCH --output=logs/exp8_%j.out
 #SBATCH --error=logs/exp8_%j.err
