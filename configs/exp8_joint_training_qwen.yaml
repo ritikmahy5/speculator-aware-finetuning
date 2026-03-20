@@ -1,0 +1,61 @@
+experiment_id: "EXP-8"
+hypothesis: "Joint draft-target LoRA training achieves high alpha without sacrificing target task quality"
+
+models:
+  target: "Qwen/Qwen2.5-7B-Instruct"
+  draft: "Qwen/Qwen2.5-0.5B-Instruct"
+
+domain: "chat"
+
+training:
+  num_epochs: 1
+  batch_size: 4
+  gradient_accumulation_steps: 4
+  max_seq_len: 1024
+  max_samples: 10000
+  scheduler: cosine
+  warmup_ratio: 0.05
+  max_grad_norm: 1.0
+  bf16: true
+  seed: 42
+
+target_lora:
+  rank: 16
+  alpha: 32
+  dropout: 0.05
+  learning_rate: 2.0e-4
+  weight_decay: 0.01
+  target_modules:
+    - q_proj
+    - k_proj
+    - v_proj
+    - o_proj
+    - gate_proj
+    - up_proj
+    - down_proj
+
+draft_lora:
+  rank: 8
+  alpha: 16
+  dropout: 0.05
+  learning_rate: 5.0e-4
+  weight_decay: 0.01
+  target_modules:
+    - q_proj
+    - k_proj
+    - v_proj
+    - o_proj
+    - gate_proj
+    - up_proj
+    - down_proj
+
+draft_loss:
+  type: "kl"
+  temperature: 1.0
+
+logging:
+  log_every: 10
+  save_checkpoints_every: 500
+  wandb: false
+
+output_dir: "results/exp8_joint_chat_qwen"

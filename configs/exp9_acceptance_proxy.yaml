@@ -1,0 +1,46 @@
+experiment_id: "EXP-9"
+hypothesis: "Direct acceptance rate proxy outperforms KL as speculator loss"
+
+models:
+  target: "meta-llama/Llama-3.1-8B-Instruct"
+  draft: "meta-llama/Llama-3.1-1B-Instruct"
+
+domain: "code"
+
+training:
+  num_epochs: 1
+  batch_size: 4
+  gradient_accumulation_steps: 4
+  max_seq_len: 1024
+  max_samples: 10000
+  scheduler: cosine
+  warmup_ratio: 0.05
+  max_grad_norm: 1.0
+  bf16: true
+  seed: 42
+
+lora:
+  rank: 16
+  alpha: 32
+  dropout: 0.05
+  target_modules:
+    - q_proj
+    - k_proj
+    - v_proj
+    - o_proj
+    - gate_proj
+    - up_proj
+    - down_proj
+
+spec_loss:
+  lam: 0.5
+  loss_type: "overlap"
+  temperature: 1.0
+  top_k: 50
+
+logging:
+  log_every: 10
+  save_checkpoints_every: 500
+  wandb: false
+
+output_dir: "results/exp9_proxy_overlap_chat_lam0.5"
