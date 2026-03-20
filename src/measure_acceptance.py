@@ -361,6 +361,12 @@ def parse_args() -> argparse.Namespace:
         help="Path to a PEFT LoRA adapter directory for the target model.",
     )
     parser.add_argument(
+        "--draft_adapter_path",
+        type=str,
+        default=None,
+        help="Path to draft model LoRA adapter (for joint training evaluation)",
+    )
+    parser.add_argument(
         "--prompts_file",
         type=str,
         default="configs/eval_prompts.yaml",
@@ -443,6 +449,7 @@ def main() -> None:
     draft_model, _ = _load_model_and_tokenizer(
         args.draft_model,
         draft_device,
+        adapter_path=args.draft_adapter_path,
     )
 
     # Freeze draft model
@@ -471,6 +478,7 @@ def main() -> None:
     results["target_model"] = args.target_model
     results["draft_model"] = args.draft_model
     results["adapter_path"] = args.adapter_path
+    results["draft_adapter_path"] = args.draft_adapter_path
     results["domain"] = args.domain
     results["seed"] = args.seed
 
