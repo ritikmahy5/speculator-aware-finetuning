@@ -662,3 +662,80 @@ This protocol costs <5% of full training compute and identifies vulnerable pairs
 ![ΔKL Vulnerability Prediction](../plots/plot_delta_kl_vulnerability.png)
 
 The scatter plot shows the strong negative correlation (r = −0.73) between ΔKL and relative α change. All Qwen points (blue) cluster in the low-ΔKL, positive-α region. Llama and Gemma points spread rightward with increasing degradation. The vertical threshold at ΔKL = 0.30 cleanly separates the two regimes.
+
+---
+
+## Section 13: Speculator-Aware DPO Experiment
+
+### 13.1 Motivation
+
+All prior experiments used supervised fine-tuning (SFT) with cross-entropy task loss. However, modern alignment pipelines increasingly rely on Direct Preference Optimization (DPO), which trains on preference pairs rather than next-token prediction. DPO uses an implicit reward model derived from the policy and a frozen reference model:
+
+```
+L_DPO = -log(σ(β × (log(π_θ(y_w|x)/π_ref(y_w|x)) - log(π_θ(y_l|x)/π_ref(y_l|x)))))
+```
+
+This section investigates: (1) does DPO alignment training degrade speculative decoding acceptance rates, and (2) does speculator-aware KL regularization help in the DPO setting?
+
+Our spec-aware DPO extension:
+
+```
+L_total = L_DPO + λ × KL(p_target || p_draft)
+```
+
+### 13.2 Experimental Setup
+
+**Models:**
+- Target: Llama-3.1-8B-Instruct (LoRA, trainable)
+- Reference: Llama-3.1-8B-Instruct (8-bit quantized, frozen)
+- Draft: Llama-3.2-1B-Instruct (bf16, frozen)
+
+**Dataset:** HuggingFaceH4/ultrafeedback_binarized (10K preference pairs)
+
+**Training:** 1 epoch, batch=2, grad_accum=8 (effective=16), lr=5e-5, cosine schedule, β=0.1
+
+**Conditions:**
+
+| Condition | λ | Description |
+|-----------|---|-------------|
+| Base | — | No fine-tuning, original model pair |
+| Standard DPO | 0.0 | DPO alignment only |
+| Spec-aware DPO | 0.1 | Mild KL regularization |
+| Spec-aware DPO | 0.5 | Strong KL regularization |
+
+**Evaluation:** Acceptance rate (α) on 50 chat prompts, draft K=5, max 128 new tokens.
+
+### 13.3 Results
+
+**Base acceptance rate:** α = 0.369 (±0.096)
+
+**Standard DPO (λ=0.0):** α = 0.371 (±0.096)
+
+**Spec-aware DPO (λ=0.1):** α = 0.383 (±0.103) — **+3.7% relative**
+
+**Spec-aware DPO (λ=0.5):** α = 0.367 (±0.097) — **−0.6% relative**
+
+### 13.4 Preliminary Analysis
+
+The most striking finding is that **standard DPO barely affects acceptance rate** (+0.5% relative change). This contrasts sharply with SFT results where Llama chat showed −33.5% degradation.
+
+**Why DPO preserves α where SFT does not:**
+
+1. **Update magnitude:** DPO optimizes preference margins between chosen/rejected completions. The gradient signal is localized to distinguishing between two similar outputs, producing a smaller distributional shift than SFT's unconditional next-token training.
+
+2. **Domain alignment:** UltraFeedback is chat/instruction data — the same distribution Llama-3.1-8B-Instruct was originally trained on. SFT on code or medical text introduces genuinely new vocabulary and patterns.
+
+3. **Reference anchoring:** DPO's implicit KL constraint (via the reference model in the loss) already acts as a mild regularizer, keeping the policy close to the reference. This inherently limits distributional drift.
+
+**Implications for speculator-aware regularization:**
+
+If the base DPO shift is negligible, the spec-aware KL term (λ > 0) may have minimal additional benefit — or could even slightly hurt task performance by constraining the model unnecessarily. The λ=0.1 and λ=0.5 results will clarify:
+- If α stays ~0.37 regardless of λ → DPO is inherently safe for speculative decoding
+- If α improves with λ > 0 → spec-aware regularization provides additional value even in low-shift settings
+- If task performance degrades with λ > 0 while α stays flat → the KL term is pure cost with no benefit in the DPO setting
+
+### 13.5 Connection to ΔKL Vulnerability Prediction
+
+This result is consistent with the ΔKL framework from Section 12. DPO on in-domain chat data likely produces a very small ΔKL (< 0.30), placing it in the "safe" regime where speculator-aware training is unnecessary. This would further validate the practical protocol: measure ΔKL first, then decide whether to add the spec loss.
+
+*This section will be updated with final results once all experiments complete.*

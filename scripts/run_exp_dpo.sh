@@ -3,8 +3,8 @@
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:h200:1
 #SBATCH --cpus-per-task=8
-#SBATCH --mem=64GB
-#SBATCH --time=08:00:00
+#SBATCH --mem=32GB
+#SBATCH --time=04:00:00
 #SBATCH --job-name=exp_dpo
 #SBATCH --output=logs/exp_dpo_%j.out
 #SBATCH --error=logs/exp_dpo_%j.err

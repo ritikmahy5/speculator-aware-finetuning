@@ -1412,6 +1412,63 @@ def plot_delta_kl_vulnerability(results_dir: Path, output_dir: Path) -> None:
     logger.info("Generated ΔKL vulnerability prediction plot.")
 
 
+def plot_dpo_comparison(results_dir: Path, output_dir: Path) -> None:
+    """Bar chart comparing acceptance rates across DPO conditions."""
+    dpo_dir = results_dir / "exp_dpo"
+    if not dpo_dir.exists():
+        logger.info("Skipping DPO comparison plot — no exp_dpo directory.")
+        return
+
+    conditions = [
+        ("Base\n(no FT)", "base_acceptance_chat.json"),
+        ("Standard\nDPO (λ=0)", "baseline_acceptance_chat.json"),
+        ("Spec-aware\nDPO (λ=0.1)", "specaware_lam0.1_acceptance_chat.json"),
+        ("Spec-aware\nDPO (λ=0.5)", "specaware_lam0.5_acceptance_chat.json"),
+    ]
+
+    labels, alphas, stds = [], [], []
+    for label, fname in conditions:
+        fpath = dpo_dir / fname
+        if not fpath.exists():
+            logger.info("Skipping DPO plot — missing %s", fname)
+            return
+        data = json.loads(fpath.read_text())
+        labels.append(label)
+        alphas.append(data["alpha"])
+        stds.append(data["alpha_std"])
+
+    colors = ["#1A5276", "#E74C3C", "#3498DB", "#8E44AD"]
+
+    fig, ax = plt.subplots(figsize=(8, 5))
+    x = np.arange(len(labels))
+    bars = ax.bar(x, alphas, yerr=stds, width=0.6, color=colors,
+                  edgecolor="white", linewidth=1.2, capsize=5, error_kw={"lw": 1.5})
+
+    # Add value labels on bars
+    for bar, alpha in zip(bars, alphas):
+        ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.015,
+                f"{alpha:.3f}", ha="center", va="bottom", fontsize=11, fontweight="bold")
+
+    ax.set_ylabel("Acceptance Rate (α)", fontsize=12)
+    ax.set_title("DPO Alignment: Effect on Speculative Decoding", fontsize=14)
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels, fontsize=10)
+    ax.set_ylim(0, max(alphas) + max(stds) + 0.08)
+    ax.yaxis.grid(True, alpha=0.3)
+    ax.set_axisbelow(True)
+
+    # Horizontal reference line at base alpha
+    ax.axhline(y=alphas[0], color="#1A5276", linestyle="--", alpha=0.4, linewidth=1)
+
+    plt.tight_layout()
+    output_dir.mkdir(parents=True, exist_ok=True)
+    for ext in ("png", "pdf"):
+        out_path = output_dir / f"plot_dpo_comparison.{ext}"
+        fig.savefig(out_path, dpi=300, bbox_inches="tight")
+    plt.close(fig)
+    logger.info("DPO comparison plot saved to %s", output_dir / "plot_dpo_comparison.png")
+
+
 def main() -> None:
     """Parse arguments and generate all available plots."""
     parser = argparse.ArgumentParser(
@@ -1459,6 +1516,7 @@ def main() -> None:
     plot_argmax_diagnostic(results_dir, output_dir)
     plot_task_eval(results_dir, output_dir)
     plot_delta_kl_vulnerability(results_dir, output_dir)
+    plot_dpo_comparison(results_dir, output_dir)
 
     # Summary table
     summary_df = generate_summary_table(results_dir)

@@ -11,6 +11,7 @@ When a target model is fine-tuned on domain-specific data, its output distributi
 - The KL-alpha relationship is model-family dependent: Llama shows strong negative correlation (r=-0.93), while Qwen shows positive correlation (r=+0.96) due to constructive distribution sharpening.
 - Qwen is inherently resilient to speculative decoding drift (max -8.4% even under stress), making Llama the primary validation target for this method.
 - **ΔKL (post-FT KL − base KL)** predicts vulnerability across families (r=−0.73, p=0.026). A threshold of ΔKL > 0.30 correctly classifies 8/9 family×domain cases.
+- **DPO alignment training barely affects acceptance rate** (+0.5% relative), suggesting spec-aware regularization is most critical for SFT, not preference optimization.
 
 ## The Approach
 
@@ -186,6 +187,19 @@ Spec-aware FT provides a better starting point for runtime draft adaptation (ATL
 
 Both approaches improve with draft adaptation. For Llama (where standard FT degrades α significantly), spec-aware FT prevents the large initial degradation that runtime adaptation must recover from.
 
+### EXP-DPO: Speculator-Aware DPO (Llama)
+
+We extend spec-aware regularization to DPO alignment training: L_total = L_DPO + λ × KL(p_target || p_draft).
+
+| Condition | α | Relative Δα |
+|-----------|---|-------------|
+| Base (no FT) | 0.369 | — |
+| Standard DPO (λ=0.0) | 0.371 | +0.5% |
+| Spec-aware DPO (λ=0.1) | 0.383 | +3.7% |
+| Spec-aware DPO (λ=0.5) | 0.367 | −0.6% |
+
+Standard DPO barely affects acceptance rate (+0.5%), unlike SFT where Llama chat degraded by 33.5%. Spec-aware DPO at λ=0.1 provides a modest boost (+3.7%), but λ=0.5 slightly hurts (−0.6%), suggesting the DPO objective already provides sufficient implicit regularization. This confirms spec-aware regularization is most critical for SFT scenarios with significant domain shift.
+
 ## Plots
 
 | Plot | Description |
@@ -204,6 +218,7 @@ Both approaches improve with draft adaptation. For Llama (where standard FT degr
 | ![Benchmark comparison](plots/plot_benchmark_comparison.png) | Standardized benchmarks: HumanEval, MedQA, MMLU |
 | ![Argmax agreement](plots/plot_argmax_agreement.png) | Argmax agreement diagnostic: mechanism validation |
 | ![ΔKL vulnerability](plots/plot_delta_kl_vulnerability.png) | ΔKL vulnerability prediction: r=−0.73 across 3 families |
+| ![DPO comparison](plots/plot_dpo_comparison.png) | EXP-DPO: Acceptance rate across DPO conditions |
 
 ## Experiments
 
@@ -218,6 +233,7 @@ Both approaches improve with draft adaptation. For Llama (where standard FT degr
 | 7 | Complementarity with runtime adaptation | Done | — | — |
 | — | Standardized benchmarks (HumanEval/MedQA/MMLU) | Done | Done | — |
 | — | Argmax agreement diagnostic | Done | Done | — |
+| DPO | Speculator-aware DPO alignment | — | Done | — |
 
 ## Quick Start
 

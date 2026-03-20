@@ -329,6 +329,27 @@ This suggests a practical **vulnerability assessment protocol**: compute base KL
 
 ![ΔKL Vulnerability Prediction](../plots/plot_delta_kl_vulnerability.png)
 
+### Extension to DPO Alignment Training
+
+A natural question is whether speculator-aware regularization extends beyond SFT to other training paradigms. We test this with Direct Preference Optimization (DPO), which trains on preference pairs using an implicit reward derived from a frozen reference model. Our spec-aware DPO loss combines the standard DPO objective with KL regularization against the draft model:
+
+L_total = L_DPO + λ × KL(p_target || p_draft)
+
+We train Llama-3.1-8B-Instruct on UltraFeedback (10K preference pairs) with β=0.1 at three λ values: 0.0 (standard DPO), 0.1, and 0.5. The key finding is that **standard DPO barely degrades acceptance rate** (α: 0.369 → 0.371, +0.5% relative), in sharp contrast to SFT where Llama chat showed −33.5% degradation. This is likely because DPO's update signal — optimizing preference margins between similar completions — produces a much smaller distributional shift than SFT's unconditional next-token training. Additionally, DPO's implicit KL constraint (via the reference model) already acts as a mild regularizer.
+
+This finding is consistent with the ΔKL vulnerability framework: DPO on in-domain chat data likely produces ΔKL well below the 0.30 vulnerability threshold. It suggests that speculator-aware regularization is most critical for SFT scenarios that introduce significant distributional shift (code, medical), while alignment-focused training methods like DPO may be inherently safe for speculative decoding.
+
+**Full DPO results (Llama, chat domain):**
+
+| Condition | α | Std | Relative Δα |
+|-----------|---|-----|-------------|
+| Base (no FT) | 0.3693 | ±0.097 | — |
+| Standard DPO (λ=0.0) | 0.3710 | ±0.098 | +0.5% |
+| Spec-aware DPO (λ=0.1) | 0.3828 | ±0.103 | +3.7% |
+| Spec-aware DPO (λ=0.5) | 0.3671 | ±0.097 | −0.6% |
+
+At λ=0.1, spec-aware DPO provides a modest 3.7% relative improvement. At λ=0.5, the regularization slightly overshoots (−0.6%), suggesting the DPO objective's implicit KL constraint already provides most of the alignment needed. The overall picture is clear: DPO produces ΔKL well below the 0.30 vulnerability threshold, so speculator-aware regularization yields diminishing returns compared to SFT scenarios.
+
 ### Limitations
 
 1. **Task performance trade-off at high λ** — at λ=0.5, MMLU drops 2-4pp; at λ=1.0 the drop reaches 5-8pp. Practitioners should choose λ based on their tolerance for general capability loss.

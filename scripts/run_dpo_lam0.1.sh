@@ -1,10 +1,10 @@
 #!/bin/bash
-#SBATCH --partition=gpu
+#SBATCH --partition=gpu-interactive
 #SBATCH --nodes=1
-#SBATCH --gres=gpu:a100:1
+#SBATCH --gres=gpu:h200:1
 #SBATCH --cpus-per-task=8
-#SBATCH --mem=64GB
-#SBATCH --time=08:00:00
+#SBATCH --mem=32GB
+#SBATCH --time=02:00:00
 #SBATCH --job-name=dpo_lam01
 #SBATCH --output=logs/dpo_lam01_%j.out
 #SBATCH --error=logs/dpo_lam01_%j.err
