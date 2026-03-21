@@ -1,0 +1,74 @@
+models:
+  target: meta-llama/Llama-3.1-8B-Instruct
+  draft: meta-llama/Llama-3.2-1B-Instruct
+lora:
+  rank: 16
+  alpha: 32
+  dropout: 0.05
+  target_modules:
+  - q_proj
+  - k_proj
+  - v_proj
+  - o_proj
+  - gate_proj
+  - up_proj
+  - down_proj
+training:
+  num_epochs: 1
+  batch_size: 4
+  gradient_accumulation_steps: 4
+  learning_rate: 0.0002
+  weight_decay: 0.01
+  warmup_ratio: 0.05
+  max_seq_len: 1024
+  max_samples: 10000
+  scheduler: cosine
+  max_grad_norm: 1.0
+  bf16: true
+  seed: 42
+spec_loss:
+  lam: 0.1
+  loss_type: kl
+  temperature: 1.0
+  top_k: null
+logging:
+  log_every: 10
+  save_checkpoints_every: 500
+  measure_acceptance_every: 200
+  wandb: false
+experiment_id: EXP-8
+hypothesis: Joint draft-target LoRA training achieves high alpha without sacrificing
+  target task quality
+domain: chat
+target_lora:
+  rank: 16
+  alpha: 32
+  dropout: 0.05
+  learning_rate: 0.0002
+  weight_decay: 0.01
+  target_modules:
+  - q_proj
+  - k_proj
+  - v_proj
+  - o_proj
+  - gate_proj
+  - up_proj
+  - down_proj
+draft_lora:
+  rank: 8
+  alpha: 16
+  dropout: 0.05
+  learning_rate: 0.0005
+  weight_decay: 0.01
+  target_modules:
+  - q_proj
+  - k_proj
+  - v_proj
+  - o_proj
+  - gate_proj
+  - up_proj
+  - down_proj
+draft_loss:
+  type: kl
+  temperature: 1.0
+output_dir: results/exp8_joint_chat_r8_lr5e-4
