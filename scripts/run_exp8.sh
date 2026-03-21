@@ -21,9 +21,12 @@
 #SBATCH --error=logs/exp8_%j.err
 set -e
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
-cd "$PROJECT_DIR"
+# --- HPC environment ---
+module load cuda/12.1.1
+source /shared/EL9/explorer/miniconda3/25.9.1/miniconda3/etc/profile.d/conda.sh
+conda activate /scratch/$USER/envs/specaware
+export HF_HOME=/scratch/$USER/.cache/huggingface
+cd /scratch/$USER/speculator-aware-finetuning
 
 # --- Parse arguments ---
 DOMAIN=${1:-chat}
@@ -32,37 +35,22 @@ DRAFT_LR=${3:-5e-4}
 
 echo "============================================"
 echo "  EXP-8: Joint Draft-Target Training"
+echo "  Started: $(date)"
 echo "============================================"
 echo "Domain: $DOMAIN | Draft rank: $DRAFT_RANK | Draft LR: $DRAFT_LR"
-echo "Project directory: $PROJECT_DIR"
 echo ""
 
-# --- HPC environment (skip if not on cluster) ---
-if command -v module &>/dev/null; then
-    module load cuda/12.1 2>/dev/null || true
-fi
-if [ -n "$SLURM_JOB_ID" ]; then
-    conda activate /scratch/mahyavanshi.r/envs/specaware 2>/dev/null || true
-    export HF_HOME=/scratch/mahyavanshi.r/.cache/huggingface
-fi
-
 # --- Detect device ---
-if python -c "import torch; assert torch.cuda.is_available()" 2>/dev/null; then
-    DEVICE="cuda:0"
-    echo "GPU detected: $(python -c 'import torch; print(torch.cuda.get_device_name(0))')"
-    GPU_COUNT=$(python -c "import torch; print(torch.cuda.device_count())")
-    if [ "$GPU_COUNT" -ge 2 ]; then
-        DRAFT_DEVICE="cuda:1"
-        echo "Multi-GPU mode: target on cuda:0, draft on cuda:1"
-    else
-        DRAFT_DEVICE="cuda:0"
-        echo "Single-GPU mode: both models on cuda:0"
-    fi
+DEVICE="cuda:0"
+GPU_COUNT=$(python -c "import torch; print(torch.cuda.device_count())")
+if [ "$GPU_COUNT" -ge 2 ]; then
+    DRAFT_DEVICE="cuda:1"
+    echo "Multi-GPU mode: target on cuda:0, draft on cuda:1"
 else
-    DEVICE="cpu"
-    DRAFT_DEVICE="cpu"
-    echo "No GPU detected -- running on CPU (will be slow)"
+    DRAFT_DEVICE="cuda:0"
+    echo "Single-GPU mode: both models on cuda:0"
 fi
+echo "GPU: $(python -c 'import torch; print(torch.cuda.get_device_name(0))')"
 
 # --- Extract model names from config ---
 TARGET_MODEL=$(python -c "import yaml; print(yaml.safe_load(open('configs/models.yaml'))['models']['target'])")
