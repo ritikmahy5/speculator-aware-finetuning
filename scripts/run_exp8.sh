@@ -52,9 +52,10 @@ else
 fi
 echo "GPU: $(python -c 'import torch; print(torch.cuda.get_device_name(0))')"
 
-# --- Extract model names from config ---
-TARGET_MODEL=$(python -c "import yaml; print(yaml.safe_load(open('configs/models.yaml'))['models']['target'])")
-DRAFT_MODEL=$(python -c "import yaml; print(yaml.safe_load(open('configs/models.yaml'))['models']['draft'])")
+# --- Extract model names from experiment config (not models.yaml) ---
+EXP_CONFIG="configs/exp8_joint_training.yaml"
+TARGET_MODEL=$(python -c "import yaml; print(yaml.safe_load(open('$EXP_CONFIG'))['models']['target'])")
+DRAFT_MODEL=$(python -c "import yaml; print(yaml.safe_load(open('$EXP_CONFIG'))['models']['draft'])")
 echo "Target model: $TARGET_MODEL"
 echo "Draft model:  $DRAFT_MODEL"
 echo ""
